@@ -25,7 +25,7 @@ Splix is a zero-friction group expense splitter built for the way people actuall
 
 ### 1. Create a group in seconds
 Set a group name, choose currency, create a 4-digit PIN, and add participants.
-
+Use unique particpants name to avoid confusion.
 ![create-group](screenshots/create-group.png)
 
 ### 2. Share the right link with the right people
