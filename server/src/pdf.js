@@ -23,7 +23,7 @@ function formatDateTime(iso) {
 export async function buildReceiptPdf(snapshot) {
   const pdf = await PDFDocument.create();
   const width = 302;
-  const height = 1700;
+  const height = 1100;
   const marginX = 18;
   let page = pdf.addPage([width, height]);
   const font = await pdf.embedFont(StandardFonts.Courier);

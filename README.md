@@ -2,7 +2,7 @@
 
 Split shared expenses with zero login friction.
 
-**Live Demo:** [Add your live link here](https://example.com)
+**Live Demo:** https://splix-app.vercel.app
 
 Splix is a zero-friction group expense splitter built for the way people actually share bills: create a group, get an edit link and a view link, add expenses , and settle up instantly without forcing anyone through signups.
 
@@ -17,7 +17,7 @@ Splix is a zero-friction group expense splitter built for the way people actuall
 - Receipt-style PDF export for a clean final summary
 - Mobile-first UI designed for real group usage
 
-<!-- Add hero / landing page screenshot here -->
+![landing-page](screenshots/landing-page.png)
 
 ---
 
@@ -26,7 +26,7 @@ Splix is a zero-friction group expense splitter built for the way people actuall
 ### 1. Create a group in seconds
 Set a group name, choose currency, create a 4-digit PIN, and add participants.
 
-<!-- Add create-group screenshot here -->
+![create-group](screenshots/create-group.png)
 
 ### 2. Share the right link with the right people
 - **Edit link** for trusted editors
@@ -34,7 +34,7 @@ Set a group name, choose currency, create a 4-digit PIN, and add participants.
 
 No account setup. No waiting around.
 
-<!-- Add generated-links screenshot here -->
+![links](screenshots/links.png)
 
 ### 3. Add expenses with flexible splits
 Track who paid and split costs using:
@@ -42,7 +42,7 @@ Track who paid and split costs using:
 - uneven by amount
 - uneven by percentage
 
-<!-- Add edit-dashboard / add-expense screenshot here -->
+![add-expense](screenshots/add-expense.png)
 
 ### 4. Settle up fast
 Splix simplifies balances into the minimum practical set of payments and supports:
@@ -51,7 +51,10 @@ Splix simplifies balances into the minimum practical set of payments and support
 - copy UPI flow
 - manual mark-as-settled state
 
-<!-- Add settlement screenshot here -->
+![settlement](screenshots/settlement.png)
+
+**after adding UPI ID**
+![upi-added](screenshots/upi-added.png)
 
 ### 5. Export a clean summary
 Download a receipt-style PDF with:
@@ -60,7 +63,7 @@ Download a receipt-style PDF with:
 - final settlements
 - totals
 
-<!-- Add PDF preview screenshot here -->
+![pdf](screenshots/pdf.png)
 
 ---
 
@@ -77,39 +80,11 @@ To get the best experience with Splix:
 - **Share the View link with the whole group**
   It is the easiest way to keep everyone aligned without giving edit access.
 
-- **Add your UPI ID in profile**
+- **Add your UPI ID in profile** 
   This enables faster direct settlement with Pay with UPI and QR.
 
-- **Download the PDF when the trip or event ends**
+- **Download the PDF when the trip or event ends** 
   It is the cleanest final summary to archive or share.
-
----
-
-## Core Features
-
-- **Zero-login flow**
-  Create a group and start immediately.
-
-- **PIN-protected editing**
-  Edit routes are protected with a 4-digit PIN and JWT session.
-
-- **Public read-only summary**
-  View links can be shared safely without edit access.
-
-- **Flexible split handling**
-  Support for even, uneven amount, and uneven percentage splits.
-
-- **Settlement simplification**
-  Reduces debts into a clean settlement plan.
-
-- **UPI-ready workflow**
-  Works with Pay with UPI, QR, and copied UPI IDs.
-
-- **Polling-based sync**
-  Cross-tab updates refresh every 5 seconds with focus/visibility refetch.
-
-- **Receipt-style PDF export**
-  Generates a polished, shareable summary.
 
 ---
 
@@ -157,7 +132,7 @@ Splix works well for things like:
 Clone the repository:
 
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/piyushagr24/splix-app.git
 cd mern-splix
 ```
 
