@@ -21,7 +21,7 @@ Splix is a zero-friction group expense splitter built for the way people actuall
 
 ---
 
-## What It Feels Like
+## Walkthrough
 
 ### 1. Create a group in seconds
 Set a group name, choose currency, create a 4-digit PIN, and add participants.
@@ -77,14 +77,11 @@ To get the best experience with Splix:
 - **Save the Edit link somewhere safe**
   The edit link is the control link for your group.
 
-- **Share the View link with the whole group**
-  It is the easiest way to keep everyone aligned without giving edit access.
-
 - **Add your UPI ID in profile** 
   This enables faster direct settlement with Pay with UPI and QR.
 
 - **Download the PDF when the trip or event ends** 
-  It is the cleanest final summary to archive or share.
+  It is the cleanest final summary to save or share.
 
 ---
 
@@ -112,7 +109,7 @@ Splix works well for things like:
 - Node.js
 - Express
 - Mongoose
-- MongoDB Atlas
+- MongoDB
 - Joi
 - JWT
 - pdf-lib
@@ -123,9 +120,8 @@ Splix works well for things like:
 
 ### Prerequisites
 
-- Node.js 18+
-- npm
-- MongoDB Atlas database
+- Node.js 20.19+ or 22.12+
+- MongoDB instance (local or Atlas)
 
 ### Installation
 
@@ -133,7 +129,7 @@ Clone the repository:
 
 ```bash
 git clone https://github.com/piyushagr24/splix.git
-cd mern-splix
+cd splix
 ```
 
 Install dependencies:
@@ -145,15 +141,14 @@ npm --prefix client install
 
 ### Environment Setup
 
-Create .env files:
+Create env files:
 - `server/.env`
-- `client/.env`
-
+- `client/.env` (optional if using `http://localhost:4000`)
 
 **`server/.env`**
 
 ```env
-MONGODB_URI=your-mongodb-atlas-uri
+MONGODB_URI=your-mongodb-uri
 JWT_SECRET=your-long-random-secret
 JWT_EXPIRES_IN=7d
 CORS_ORIGIN=http://localhost:5173
