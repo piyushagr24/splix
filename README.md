@@ -132,7 +132,7 @@ Splix works well for things like:
 Clone the repository:
 
 ```bash
-git clone https://github.com/piyushagr24/splix-app.git
+git clone https://github.com/piyushagr24/splix.git
 cd mern-splix
 ```
 
