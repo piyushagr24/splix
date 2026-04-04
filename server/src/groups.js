@@ -11,16 +11,15 @@ import { buildReceiptPdf } from "./pdf.js";
 import { getGroupByEditId, getGroupByViewId, getSnapshotByGroup } from "./snapshot.js";
 import { setNoCache } from "./http.js";
 import { buildSplitJson } from "./split.js";
+import { normalizeUpiId, isValidUpiId } from "./upiValidation.js";
 import { validateBody } from "./validate.js";
 
-//for split validation
 const splitEntrySchema = Joi.object({
   participantId: Joi.string().required(),
   amountMinor: Joi.number().integer().min(0).optional(),
   percent: Joi.number().min(0).max(100).optional()
 });
 
-//for new group
 const createGroupSchema = Joi.object({
   name: Joi.string().trim().min(1).max(50).required(),
   currency: Joi.string().trim().uppercase().length(3).required(),
@@ -45,13 +44,30 @@ const addExpenseSchema = Joi.object({
   }).required()
 });
 
-// profile
+const upiIdSchema = Joi.alternatives()
+  .try(
+    Joi.string()
+      .trim()
+      .max(120)
+      .custom((value, helpers) => {
+        const normalized = normalizeUpiId(value);
+        if (!normalized) return "";
+        if (!isValidUpiId(normalized)) {
+          return helpers.error("upi.invalid");
+        }
+        return normalized;
+      }, "UPI ID validation"),
+    Joi.valid(null)
+  )
+  .messages({
+    "upi.invalid": "Enter a valid UPI ID format like name@bank"
+  });
+
 const patchParticipantSchema = Joi.object({
   name: Joi.string().trim().min(1).max(32).optional(),
-  upiId: Joi.string().trim().allow("", null).max(120).optional()
+  upiId: upiIdSchema.optional()
 }).min(1);
 
-// for settlment toggle
 const patchSettlementSchema = Joi.object({
   fromParticipantId: Joi.string().required(),
   toParticipantId: Joi.string().required(),
@@ -108,14 +124,12 @@ async function createGroup(req, res) {
     });
   } catch (error) {
     if (group?._id) {
-      // delete group if participant creation failed midway
       await Group.deleteOne({ _id: group._id });
     }
     throw error;
   }
 }
 
-// returns json of view mode
 async function getViewSnapshot(req, res) {
   const group = await getGroupByViewId(req.params.viewId);
   if (!group) return res.status(404).json({ error: "Group not found" });
@@ -124,7 +138,6 @@ async function getViewSnapshot(req, res) {
   return res.json(snapshot);
 }
 
-// for edit mode
 async function getEditSnapshot(req, res) {
   const group = await getGroupByEditId(req.params.editId);
   if (!group) return res.status(404).json({ error: "Group not found" });
@@ -137,9 +150,9 @@ async function addExpense(req, res) {
   const { editId } = req.params;
   const group = await getGroupByEditId(editId);
   if (!group) return res.status(404).json({ error: "Group not found" });
-  // all the people in the split
+
   const participants = await Participant.find({ groupId: group._id }).lean();
-  const participantsById = new Map(participants.map((p) => [String(p._id), p]));
+  const participantsById = new Map(participants.map((participant) => [String(participant._id), participant]));
   if (!participantsById.has(req.body.paidByParticipantId)) {
     return res.status(400).json({ error: "Invalid payer participant" });
   }
@@ -147,15 +160,14 @@ async function addExpense(req, res) {
   let splitJson;
   try {
     splitJson = buildSplitJson({
-    amountMinor: req.body.amountMinor,
-    split: req.body.split,
-    participantsById
+      amountMinor: req.body.amountMinor,
+      split: req.body.split,
+      participantsById
     });
   } catch (error) {
     return res.status(400).json({ error: error.message });
   }
 
-// expense logs
   const expense = await Expense.create({
     groupId: group._id,
     title: req.body.title,
@@ -187,7 +199,6 @@ async function deleteExpense(req, res) {
   return res.status(204).send();
 }
 
-// for updating profile
 async function patchParticipant(req, res) {
   const { editId, participantId } = req.params;
   const group = await getGroupByEditId(editId);
@@ -214,7 +225,6 @@ async function patchParticipant(req, res) {
   });
 }
 
-// mark as settled 
 async function patchSettlement(req, res) {
   const { editId } = req.params;
   const group = await getGroupByEditId(editId);
@@ -241,12 +251,10 @@ async function patchSettlement(req, res) {
   return res.json({ ok: true });
 }
 
-// to download pdf
 async function getViewPdf(req, res) {
   const group = await getGroupByViewId(req.params.viewId);
   if (!group) return res.status(404).json({ error: "Group not found" });
   const snapshot = await getSnapshotByGroup(group);
-  // convert to downloadable pdf
   const bytes = await buildReceiptPdf(snapshot);
   setNoCache(res);
   res.setHeader("Content-Type", "application/pdf");

@@ -49,8 +49,12 @@ export function ParticipantProfileCard({
           >
             <div className="mt-3 grid gap-2.5 md:grid-cols-[1fr_240px] md:gap-3">
               <input
+                autoCapitalize="none"
+                autoCorrect="off"
                 className="input text-sm sm:text-base"
-                placeholder="UPI ID (optional)"
+                inputMode="email"
+                placeholder="UPI ID(Use valid format like `name@bank` or `phone@bank`)"
+                spellCheck={false}
                 value={upiId}
                 onChange={(event) => setUpiId(event.target.value)}
               />
@@ -58,6 +62,7 @@ export function ParticipantProfileCard({
                 {saving ? "Saving..." : "Save UPI"}
               </button>
             </div>
+            <p className="mt-2 text-[11px] text-zinc-500 sm:text-xs">Use valid format like `name@bank` or `phone@bank`.</p>
           </motion.div>
         ) : null}
       </AnimatePresence>

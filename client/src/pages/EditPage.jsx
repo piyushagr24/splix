@@ -20,6 +20,7 @@ import { SettlementList } from "../components/SettlementList";
 import { usePollingSnapshot } from "../usePollingSnapshot";
 import { deriveBalances, simplifyDebts } from "../utils/settlement";
 import { identityKey, tokenKey } from "../utils/storage";
+import { isValidUpiId, normalizeUpiId } from "../utils/upiValidation";
 
 export function EditPage() {
   const { id: editId = "" } = useParams();
@@ -148,10 +149,17 @@ export function EditPage() {
 
   async function saveProfile(upiId) {
     if (!token || !selectedParticipantId) return;
+
+    const normalizedUpiId = normalizeUpiId(upiId);
+    if (normalizedUpiId && !isValidUpiId(normalizedUpiId)) {
+      toast.error("Enter a valid UPI ID like name@bank");
+      return;
+    }
+
     setSavingProfile(true);
     try {
-      await updateParticipant(editId, selectedParticipantId, token, { upiId });
-      toast.success("Profile saved");
+      await updateParticipant(editId, selectedParticipantId, token, { upiId: normalizedUpiId });
+      toast.success(normalizedUpiId ? "UPI ID saved" : "UPI ID removed");
       await refetch();
     } catch (err) {
       toast.error(err.message || "Failed to save profile");

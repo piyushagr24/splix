@@ -1,6 +1,7 @@
-import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
-// import { safeText } from "./safeText.js";
+import { PDFDocument, PDFName, PDFArray, PDFNumber, PDFString, StandardFonts, rgb } from "pdf-lib";
 import { formatMoney } from "./settlement.js";
+
+const SPLIX_URL = "https://splix-app.vercel.app";
 
 function safeText(value) {
   return String(value || "")
@@ -20,6 +21,26 @@ function formatDateTime(iso) {
   });
 }
 
+function addLinkAnnotation(pdf, page, { x, y, width, height, url }) {
+  const context = pdf.context;
+  const link = context.obj({
+    Type: PDFName.of("Annot"),
+    Subtype: PDFName.of("Link"),
+    Rect: context.obj([x, y, x + width, y + height]),
+    Border: context.obj([0, 0, 0]),
+    A: context.obj({
+      Type: PDFName.of("Action"),
+      S: PDFName.of("URI"),
+      URI: PDFString.of(url)
+    })
+  });
+
+  const linkRef = context.register(link);
+  const annots = page.node.lookup(PDFName.of("Annots"), PDFArray) || context.obj([]);
+  annots.push(linkRef);
+  page.node.set(PDFName.of("Annots"), annots);
+}
+
 export async function buildReceiptPdf(snapshot) {
   const pdf = await PDFDocument.create();
   const width = 302;
@@ -29,8 +50,8 @@ export async function buildReceiptPdf(snapshot) {
   const font = await pdf.embedFont(StandardFonts.Courier);
   const bold = await pdf.embedFont(StandardFonts.CourierBold);
 
-  const participantById = new Map(snapshot.participants.map((p) => [p.id, p]));
-  const gross = snapshot.expenses.reduce((sum, exp) => sum + exp.amountMinor, 0);
+  const participantById = new Map(snapshot.participants.map((participant) => [participant.id, participant]));
+  const gross = snapshot.expenses.reduce((sum, expense) => sum + expense.amountMinor, 0);
   const orderedExpenses = snapshot.expenses
     .slice()
     .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
@@ -59,17 +80,31 @@ export async function buildReceiptPdf(snapshot) {
     y -= lineGap;
   }
 
-  function center(value, isBold = false, size = 10, color = text) {
+  function center(value, isBold = false, size = 10, color = text, url = "") {
     ensureSpace(1);
     const clean = safeText(value);
-    const widthAtSize = (isBold ? bold : font).widthOfTextAtSize(clean, size);
+    const activeFont = isBold ? bold : font;
+    const widthAtSize = activeFont.widthOfTextAtSize(clean, size);
+    const x = (width - widthAtSize) / 2;
+
     page.drawText(clean, {
-      x: (width - widthAtSize) / 2,
+      x,
       y,
       size,
-      font: isBold ? bold : font,
+      font: activeFont,
       color
     });
+
+    if (url) {
+      addLinkAnnotation(pdf, page, {
+        x,
+        y: y - 2,
+        width: widthAtSize,
+        height: size + 4,
+        url
+      });
+    }
+
     y -= lineGap;
   }
 
@@ -77,7 +112,7 @@ export async function buildReceiptPdf(snapshot) {
     line(char.repeat(42), false, 8, muted);
   }
 
-  center("SPLIX", true, 15, accent);
+  center("SPLIX", true, 15, accent, SPLIX_URL);
   center("EXPENSE SETTLEMENT RECEIPT", true, 9);
   center("Share PDF summary", false, 8, muted);
   divider("=");
@@ -132,6 +167,7 @@ export async function buildReceiptPdf(snapshot) {
 
   divider("=");
   center("Thank you for using Splix", true, 9, accent);
+  center("https://splix-app.vercel.app", false, 7, accent, SPLIX_URL);
   center("System-generated receipt", false, 8, muted);
 
   return pdf.save();
