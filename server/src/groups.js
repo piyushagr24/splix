@@ -48,6 +48,7 @@ const upiIdSchema = Joi.alternatives()
   .try(
     Joi.string()
       .trim()
+      .allow("")
       .max(120)
       .custom((value, helpers) => {
         const normalized = normalizeUpiId(value);
