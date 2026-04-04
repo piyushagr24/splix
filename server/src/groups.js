@@ -1,0 +1,280 @@
+import bcrypt from "bcryptjs";
+import express from "express";
+import rateLimit from "express-rate-limit";
+import Joi from "joi";
+import { nanoid } from "nanoid";
+import { requireEditAuth } from "./auth.js";
+import { Expense } from "./models/Expense.js";
+import { Group } from "./models/Group.js";
+import { Participant } from "./models/Participant.js";
+import { buildReceiptPdf } from "./pdf.js";
+import { getGroupByEditId, getGroupByViewId, getSnapshotByGroup } from "./snapshot.js";
+import { setNoCache } from "./http.js";
+import { buildSplitJson } from "./split.js";
+import { validateBody } from "./validate.js";
+
+//for split validation
+const splitEntrySchema = Joi.object({
+  participantId: Joi.string().required(),
+  amountMinor: Joi.number().integer().min(0).optional(),
+  percent: Joi.number().min(0).max(100).optional()
+});
+
+//for new group
+const createGroupSchema = Joi.object({
+  name: Joi.string().trim().min(1).max(50).required(),
+  currency: Joi.string().trim().uppercase().length(3).required(),
+  pin: Joi.string().pattern(/^\d{4}$/).required(),
+  participants: Joi.array()
+    .items(
+      Joi.object({
+        name: Joi.string().trim().min(1).max(32).required()
+      })
+    )
+    .min(2)
+    .required()
+});
+
+const addExpenseSchema = Joi.object({
+  title: Joi.string().trim().min(1).max(60).required(),
+  amountMinor: Joi.number().integer().min(1).required(),
+  paidByParticipantId: Joi.string().required(),
+  split: Joi.object({
+    mode: Joi.string().valid("even", "amount", "percentage").required(),
+    entries: Joi.array().items(splitEntrySchema).min(1).required()
+  }).required()
+});
+
+// profile
+const patchParticipantSchema = Joi.object({
+  name: Joi.string().trim().min(1).max(32).optional(),
+  upiId: Joi.string().trim().allow("", null).max(120).optional()
+}).min(1);
+
+// for settlment toggle
+const patchSettlementSchema = Joi.object({
+  fromParticipantId: Joi.string().required(),
+  toParticipantId: Joi.string().required(),
+  amountMinor: Joi.number().integer().min(1).required(),
+  settled: Joi.boolean().required()
+});
+
+const viewSnapshotLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 1500,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many view requests. Please try again shortly." }
+});
+
+const viewPdfLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many PDF requests. Please try again shortly." }
+});
+
+async function touchGroupActivity(groupId) {
+  await Group.updateOne({ _id: groupId }, { $set: { lastActivityAt: new Date() } });
+}
+
+async function createGroup(req, res) {
+  const { name, currency, pin, participants } = req.body;
+  const pinHash = await bcrypt.hash(pin, 10);
+  const editId = nanoid(18);
+  const viewId = nanoid(18);
+  let group = null;
+  try {
+    group = await Group.create({ name, currency, pinHash, editId, viewId });
+
+    await Participant.insertMany(
+      participants.map((participant) => ({
+        groupId: group._id,
+        name: participant.name
+      }))
+    );
+    return res.status(201).json({
+      group: {
+        id: String(group._id),
+        name: group.name,
+        currency: group.currency,
+        editId: group.editId,
+        viewId: group.viewId,
+        createdAt: group.createdAt
+      },
+      editLink: `/edit/${editId}`,
+      viewLink: `/view/${viewId}`
+    });
+  } catch (error) {
+    if (group?._id) {
+      // delete group if participant creation failed midway
+      await Group.deleteOne({ _id: group._id });
+    }
+    throw error;
+  }
+}
+
+// returns json of view mode
+async function getViewSnapshot(req, res) {
+  const group = await getGroupByViewId(req.params.viewId);
+  if (!group) return res.status(404).json({ error: "Group not found" });
+  const snapshot = await getSnapshotByGroup(group);
+  setNoCache(res);
+  return res.json(snapshot);
+}
+
+// for edit mode
+async function getEditSnapshot(req, res) {
+  const group = await getGroupByEditId(req.params.editId);
+  if (!group) return res.status(404).json({ error: "Group not found" });
+  const snapshot = await getSnapshotByGroup(group);
+  setNoCache(res);
+  return res.json(snapshot);
+}
+
+async function addExpense(req, res) {
+  const { editId } = req.params;
+  const group = await getGroupByEditId(editId);
+  if (!group) return res.status(404).json({ error: "Group not found" });
+  // all the people in the split
+  const participants = await Participant.find({ groupId: group._id }).lean();
+  const participantsById = new Map(participants.map((p) => [String(p._id), p]));
+  if (!participantsById.has(req.body.paidByParticipantId)) {
+    return res.status(400).json({ error: "Invalid payer participant" });
+  }
+
+  let splitJson;
+  try {
+    splitJson = buildSplitJson({
+    amountMinor: req.body.amountMinor,
+    split: req.body.split,
+    participantsById
+    });
+  } catch (error) {
+    return res.status(400).json({ error: error.message });
+  }
+
+// expense logs
+  const expense = await Expense.create({
+    groupId: group._id,
+    title: req.body.title,
+    amountMinor: req.body.amountMinor,
+    paidByParticipantId: req.body.paidByParticipantId,
+    splitJson
+  });
+
+  await touchGroupActivity(group._id);
+
+  return res.status(201).json({
+    id: String(expense._id),
+    groupId: String(expense.groupId),
+    title: expense.title,
+    amountMinor: expense.amountMinor,
+    paidByParticipantId: String(expense.paidByParticipantId),
+    splitJson: expense.splitJson,
+    createdAt: expense.createdAt
+  });
+}
+
+async function deleteExpense(req, res) {
+  const { editId, expenseId } = req.params;
+  const group = await getGroupByEditId(editId);
+  if (!group) return res.status(404).json({ error: "Group not found" });
+  const deleted = await Expense.findOneAndDelete({ _id: expenseId, groupId: group._id });
+  if (!deleted) return res.status(404).json({ error: "Expense not found" });
+  await touchGroupActivity(group._id);
+  return res.status(204).send();
+}
+
+// for updating profile
+async function patchParticipant(req, res) {
+  const { editId, participantId } = req.params;
+  const group = await getGroupByEditId(editId);
+  if (!group) return res.status(404).json({ error: "Group not found" });
+
+  const patch = {};
+  if (req.body.name !== undefined) patch.name = req.body.name;
+  if (req.body.upiId !== undefined) patch.upiId = req.body.upiId || null;
+
+  const participant = await Participant.findOneAndUpdate(
+    { _id: participantId, groupId: group._id },
+    { $set: patch },
+    { new: true }
+  ).lean();
+  if (!participant) return res.status(404).json({ error: "Participant not found" });
+  await touchGroupActivity(group._id);
+
+  return res.json({
+    id: String(participant._id),
+    groupId: String(participant.groupId),
+    name: participant.name,
+    upiId: participant.upiId,
+    createdAt: participant.createdAt
+  });
+}
+
+// mark as settled 
+async function patchSettlement(req, res) {
+  const { editId } = req.params;
+  const group = await getGroupByEditId(editId);
+  if (!group) return res.status(404).json({ error: "Group not found" });
+  const key = {
+    fromParticipantId: req.body.fromParticipantId,
+    toParticipantId: req.body.toParticipantId,
+    amountMinor: req.body.amountMinor
+  };
+  const states = Array.isArray(group.settlementStates) ? [...group.settlementStates] : [];
+  const index = states.findIndex(
+    (state) =>
+      state.fromParticipantId === key.fromParticipantId &&
+      state.toParticipantId === key.toParticipantId &&
+      state.amountMinor === key.amountMinor
+  );
+  if (index >= 0) {
+    states[index] = { ...states[index], settled: req.body.settled };
+  } else {
+    states.push({ ...key, settled: req.body.settled });
+  }
+  await Group.updateOne({ _id: group._id }, { $set: { settlementStates: states } });
+  await touchGroupActivity(group._id);
+  return res.json({ ok: true });
+}
+
+// to download pdf
+async function getViewPdf(req, res) {
+  const group = await getGroupByViewId(req.params.viewId);
+  if (!group) return res.status(404).json({ error: "Group not found" });
+  const snapshot = await getSnapshotByGroup(group);
+  // convert to downloadable pdf
+  const bytes = await buildReceiptPdf(snapshot);
+  setNoCache(res);
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename="${group.name.replace(/\s+/g, "_")}_splix_receipt.pdf"`
+  );
+  return res.send(Buffer.from(bytes));
+}
+
+const router = express.Router();
+router.post("/groups", validateBody(createGroupSchema), createGroup);
+router.get("/groups/view/:viewId", viewSnapshotLimiter, getViewSnapshot);
+router.get("/groups/edit/:editId", requireEditAuth, getEditSnapshot);
+router.post("/groups/edit/:editId/expenses", requireEditAuth, validateBody(addExpenseSchema), addExpense);
+router.delete("/groups/edit/:editId/expenses/:expenseId", requireEditAuth, deleteExpense);
+router.patch(
+  "/groups/edit/:editId/participants/:participantId",
+  requireEditAuth,
+  validateBody(patchParticipantSchema),
+  patchParticipant
+);
+router.patch(
+  "/groups/edit/:editId/settlements",
+  requireEditAuth,
+  validateBody(patchSettlementSchema),
+  patchSettlement
+);
+router.get("/groups/view/:viewId/pdf", viewPdfLimiter, getViewPdf);
+
+export default router;

@@ -1,0 +1,101 @@
+// all frontend to backend API calls
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "http://localhost:4000").replace(/\/$/, "");
+
+//global handler
+async function apiRequest(path, options = {}) {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    cache: options.cache || "no-store",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...(options.headers || {})
+    }
+  });
+
+  if (!response.ok) {
+    let message = "Request failed";
+    try {
+      const data = await response.json();
+      message = data.details?.join(", ") || data.error || message;
+    } catch {
+      // Ignore malformed JSON errors.
+    }
+    throw new Error(message);
+  }
+
+  if (response.status === 204) return null;
+  return response.json();
+}
+
+function createGroup(payload) {
+  return apiRequest("/api/groups", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+function createSession(payload) {
+  return apiRequest("/api/session", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+function fetchViewSnapshot(viewId) {
+  return apiRequest(`/api/groups/view/${viewId}`);
+}
+
+function fetchEditSnapshot(editId, token) {
+  return apiRequest(`/api/groups/edit/${editId}`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+}
+
+function addExpense(editId, token, payload) {
+  return apiRequest(`/api/groups/edit/${editId}/expenses`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(payload)
+  });
+}
+
+function deleteExpense(editId, expenseId, token) {
+  return apiRequest(`/api/groups/edit/${editId}/expenses/${expenseId}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` }
+  });
+}
+
+function updateParticipant(editId, participantId, token, payload) {
+  return apiRequest(`/api/groups/edit/${editId}/participants/${participantId}`, {
+    method: "PATCH",
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(payload)
+  });
+}
+
+function updateSettlement(editId, token, payload) {
+  return apiRequest(`/api/groups/edit/${editId}/settlements`, {
+    method: "PATCH",
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(payload)
+  });
+}
+
+function pdfDownloadUrl(viewId) {
+  return `${API_BASE_URL}/api/groups/view/${viewId}/pdf`;
+}
+
+export {
+  API_BASE_URL,
+  addExpense,
+  apiRequest,
+  createGroup,
+  createSession,
+  deleteExpense,
+  fetchEditSnapshot,
+  fetchViewSnapshot,
+  pdfDownloadUrl,
+  updateParticipant,
+  updateSettlement
+};

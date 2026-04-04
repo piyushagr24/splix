@@ -1,0 +1,14 @@
+{
+  "name": "splix-mern-workspace",
+  "version": "1.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "npm run dev:server",
+    "dev:server": "npm --prefix server run dev",
+    "dev:client": "npm --prefix client run dev",
+    "install:all": "npm --prefix server install && npm --prefix client install"
+  },
+  "dependencies": {
+    "mongodb": "^7.1.0"
+  }
+}

@@ -1,0 +1,154 @@
+@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Sora:wght@600;700&display=swap");
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+
+@layer base {
+  :root {
+    --accent-green: 22 163 74;
+    --accent-lime: 101 163 13;
+  }
+
+  html,
+  body {
+    min-height: 100%;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    margin: 0;
+    font-family: "Manrope", "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+    @apply bg-white text-zinc-900;
+    background-image:
+      radial-gradient(circle at 14% 0%, rgba(22, 163, 74, 0.1), transparent 42%),
+      radial-gradient(circle at 86% 18%, rgba(101, 163, 13, 0.08), transparent 38%),
+      linear-gradient(to right, rgba(24, 24, 27, 0.03) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(24, 24, 27, 0.03) 1px, transparent 1px);
+    background-size: auto, auto, 34px 34px, 34px 34px;
+    background-position: center, center, center, center;
+  }
+
+  ::selection {
+    background: rgba(22, 163, 74, 0.28);
+  }
+}
+
+h1,
+h2,
+h3 {
+  font-family: "Sora", "Manrope", sans-serif;
+  letter-spacing: -0.02em;
+}
+
+.card {
+  @apply rounded-xl border border-zinc-200 bg-white/90 p-4 shadow-sm transition duration-300 hover:-translate-y-0.5 hover:shadow-md sm:p-5;
+}
+
+.btn {
+  @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 font-semibold transition duration-200 active:scale-95 hover:-translate-y-0.5;
+}
+
+.btn-primary {
+  @apply btn bg-emerald-600 text-white shadow-[0_10px_26px_rgba(22,163,74,0.35)] hover:bg-emerald-700;
+}
+
+.btn-ghost {
+  @apply btn border border-zinc-300 bg-white text-zinc-800 hover:bg-zinc-100;
+}
+
+.input {
+  @apply w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-zinc-900 outline-none transition focus:border-emerald-600 focus:ring-2 focus:ring-emerald-200;
+}
+
+.shell {
+  @apply relative mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8;
+}
+
+.hero-chip {
+  @apply inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-emerald-800;
+}
+
+.splix-toast {
+  color: rgb(6 95 70) !important;
+}
+
+.splix-toast-success {
+  border: 1px solid rgba(134, 239, 172, 0.9) !important;
+  background: linear-gradient(180deg, rgba(240, 253, 244, 0.98), rgba(220, 252, 231, 0.96)) !important;
+  color: rgb(6 95 70) !important;
+  box-shadow: 0 18px 45px rgba(16, 185, 129, 0.14) !important;
+}
+
+.splix-toast-error {
+  border: 1px solid rgba(252, 165, 165, 0.92) !important;
+  background: linear-gradient(180deg, rgba(254, 242, 242, 0.98), rgba(254, 226, 226, 0.96)) !important;
+  color: rgb(153 27 27) !important;
+  box-shadow: 0 18px 45px rgba(220, 38, 38, 0.14) !important;
+}
+
+@keyframes gradient-shift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.gradient-text {
+  background-image: linear-gradient(120deg, rgb(22 163 74), rgb(101 163 13), rgb(22 163 74));
+  background-size: 200% 200%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: gradient-shift 8s ease infinite;
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.reveal {
+  animation: fade-up 0.45s ease both;
+}
+
+.reveal-1 {
+  animation-delay: 0.08s;
+}
+
+.reveal-2 {
+  animation-delay: 0.16s;
+}
+
+.reveal-3 {
+  animation-delay: 0.24s;
+}
+
+.reveal-4 {
+  animation-delay: 0.32s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal,
+  .reveal-1,
+  .reveal-2,
+  .reveal-3,
+  .reveal-4,
+  .gradient-text {
+    animation: none !important;
+  }
+}

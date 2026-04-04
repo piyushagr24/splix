@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="splixTab" x1="10" y1="54" x2="54" y2="10" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#22c55e" />
+      <stop offset="1" stop-color="#84cc16" />
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="#ffffff" />
+  <rect x="1.5" y="1.5" width="61" height="61" rx="12.5" fill="none" stroke="#d4d4d8" />
+  <path d="M14 50L50 14" stroke="url(#splixTab)" stroke-width="8" stroke-linecap="round" />
+  <circle cx="18" cy="23" r="6" fill="#3f3f46" />
+  <circle cx="46" cy="41" r="6" fill="#3f3f46" />
+</svg>
