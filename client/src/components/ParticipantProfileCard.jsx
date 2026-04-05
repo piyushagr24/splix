@@ -53,7 +53,7 @@ export function ParticipantProfileCard({
                 autoCorrect="off"
                 className="input text-sm sm:text-base"
                 inputMode="email"
-                placeholder="UPI ID(Use valid format like `name@bank` or `phone@bank`)"
+                placeholder="UPI ID(Optional)"
                 spellCheck={false}
                 value={upiId}
                 onChange={(event) => setUpiId(event.target.value)}
@@ -61,6 +61,7 @@ export function ParticipantProfileCard({
               <button className="btn-ghost rounded-xl py-2 text-xs sm:py-3 sm:text-base" disabled={saving} onClick={() => onSave(upiId)} type="button">
                 {saving ? "Saving..." : "Save UPI"}
               </button>
+              <p className="mt-1 text-[11px] text-zinc-600 sm:text-xs">Use valid format like `name/phone@bank` or `phone@bank`</p>
             </div>
           </motion.div>
         ) : null}

@@ -161,7 +161,7 @@ export function CreateGroupCard() {
         </div>
 
         <button className="btn-primary px-4 py-2 text-sm" type="submit" disabled={saving || !canSubmit}>
-          {saving ? "Creating group..." : "Create group"}
+          {saving ? "Creating group...Please wait" : "Create group"}
         </button>
       </form>
 
