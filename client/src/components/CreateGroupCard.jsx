@@ -1,7 +1,7 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CheckCircle2, Copy, ExternalLink, X } from "lucide-react";
 import { toast } from "sonner";
-import { createGroup } from "../api";
+import { createGroup, warmApi } from "../api";
 
 const standardCurrencies = ["AED", "AUD", "BRL", "CAD", "CHF", "CNY", "EUR", "GBP", "HKD", "INR", "JPY", "KRW", "MXN", "NOK", "NZD", "SAR", "SEK", "SGD", "TRY", "USD", "ZAR"];
 
@@ -12,6 +12,20 @@ export function CreateGroupCard() {
   const [participants, setParticipants] = useState(["Person 1", "Person 2"]);
   const [result, setResult] = useState(null);
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    const runWarmup = () => {
+      void warmApi();
+    };
+
+    if (typeof window !== "undefined" && "requestIdleCallback" in window) {
+      const id = window.requestIdleCallback(runWarmup, { timeout: 2000 });
+      return () => window.cancelIdleCallback(id);
+    }
+
+    const timeoutId = window.setTimeout(runWarmup, 600);
+    return () => window.clearTimeout(timeoutId);
+  }, []);
 
   const canSubmit = useMemo(
     () => name.trim() && /^\d{4}$/.test(pin) && participants.filter((p) => p.trim()).length >= 2,
@@ -84,12 +98,13 @@ export function CreateGroupCard() {
         <h2 className="text-lg font-semibold text-zinc-900 sm:text-xl">Create Group</h2>
       </div>
       <form className="mt-3.5 grid gap-2.5 sm:mt-4 sm:gap-3" onSubmit={onSubmit}>
-        <input className="input text-sm sm:text-base" maxLength={50} placeholder="Group name (e.g. Goa Trip)" value={name} onChange={(e) => setName(e.target.value)} />
+        <input className="input text-sm sm:text-base" maxLength={50} placeholder="Group name (e.g. Goa Trip)" value={name} onChange={(e) => setName(e.target.value)} onFocus={() => void warmApi()} />
         <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
           <select
             className="input text-sm sm:text-base"
             value={currency}
             onChange={(e) => setCurrency(e.target.value)}
+            onFocus={() => void warmApi()}
           >
             {standardCurrencies.map((code) => (
               <option key={code} value={code}>
@@ -104,6 +119,7 @@ export function CreateGroupCard() {
             inputMode="numeric"
             value={pin}
             onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
+            onFocus={() => void warmApi()}
           />
         </div>
 
@@ -118,6 +134,7 @@ export function CreateGroupCard() {
                 onChange={(e) =>
                   setParticipants((curr) => curr.map((item, i) => (i === index ? e.target.value : item)))
                 }
+                onFocus={() => void warmApi()}
               />
               <button
                 className="btn-ghost p-2 text-xs sm:text-sm"
@@ -144,7 +161,7 @@ export function CreateGroupCard() {
         </div>
 
         <button className="btn-primary px-4 py-2 text-sm" type="submit" disabled={saving || !canSubmit}>
-          {saving ? "Creating...Please Wait." : "Create group"}
+          {saving ? "Creating group..." : "Create group"}
         </button>
       </form>
 

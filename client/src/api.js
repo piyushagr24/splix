@@ -1,5 +1,6 @@
 // all frontend to backend API calls
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "http://localhost:4000").replace(/\/$/, "");
+let apiWarmupPromise = null;
 
 //global handler
 async function apiRequest(path, options = {}) {
@@ -25,6 +26,16 @@ async function apiRequest(path, options = {}) {
 
   if (response.status === 204) return null;
   return response.json();
+}
+
+function warmApi() {
+  if (!apiWarmupPromise) {
+    apiWarmupPromise = fetch(`${API_BASE_URL}/health`, {
+      method: "GET",
+      cache: "no-store"
+    }).catch(() => null);
+  }
+  return apiWarmupPromise;
 }
 
 function createGroup(payload) {
@@ -97,5 +108,6 @@ export {
   fetchViewSnapshot,
   pdfDownloadUrl,
   updateParticipant,
-  updateSettlement
+  updateSettlement,
+  warmApi
 };
