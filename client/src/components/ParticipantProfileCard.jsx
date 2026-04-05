@@ -62,7 +62,6 @@ export function ParticipantProfileCard({
                 {saving ? "Saving..." : "Save UPI"}
               </button>
             </div>
-            <p className="mt-2 text-[11px] text-zinc-500 sm:text-xs">Use valid format like `name@bank` or `phone@bank`.</p>
           </motion.div>
         ) : null}
       </AnimatePresence>
