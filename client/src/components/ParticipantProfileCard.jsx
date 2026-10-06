@@ -1,12 +1,20 @@
 import { useEffect, useState } from "react";
-import { ChevronDown, ChevronUp } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { Check, QrCode, User, UserCheck, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle
+} from "@/components/ui/dialog";
 
-export function ParticipantProfileCard({
+export function ParticipantProfileDialog({
+  open,
+  onOpenChange,
   participant,
   saving,
-  isOpen,
-  onToggle,
   onChangePerson,
   onSave
 }) {
@@ -18,54 +26,71 @@ export function ParticipantProfileCard({
 
   if (!participant) return null;
 
-  const profileState = participant.upiId ? "UPI added" : "Add UPI to receive direct payments";
-
   return (
-    <section className="card reveal reveal-1">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p className="text-xs font-medium text-zinc-900 sm:text-base">You are: {participant.name}</p>
-          <p className="mt-1 text-[11px] text-zinc-600 sm:text-xs">{profileState}</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <button className="btn-ghost rounded-lg px-2.5 py-1.5 text-xs font-medium sm:px-3 sm:py-2 sm:text-sm" onClick={onToggle} type="button">
-            {isOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-            {isOpen ? "Hide Profile" : "Show Profile"}
-          </button>
-          <button className="btn-ghost rounded-lg px-2.5 py-1.5 text-xs font-medium sm:px-3 sm:py-2 sm:text-sm" onClick={onChangePerson} type="button">
-            Change Person
-          </button>
-        </div>
-      </div>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-800 mb-2">
+            <UserCheck className="h-6 w-6" />
+          </div>
+          <DialogTitle className="text-center">Participant Profile</DialogTitle>
+          <DialogDescription className="text-center">
+            You are managing expenses as <strong className="text-zinc-900 font-semibold">{participant.name}</strong>
+          </DialogDescription>
+        </DialogHeader>
 
-      <AnimatePresence initial={false}>
-        {isOpen ? (
-          <motion.div
-            className="overflow-hidden"
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.22, ease: "easeOut" }}
-          >
-            <div className="mt-3 grid gap-2.5 md:grid-cols-[1fr_240px] md:gap-3">
-              <input
+        <div className="space-y-4 pt-2">
+          {/* UPI Setup */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
+              Your UPI ID (Optional)
+            </label>
+            <div className="relative">
+              <Input
                 autoCapitalize="none"
                 autoCorrect="off"
-                className="input text-sm sm:text-base"
-                inputMode="email"
-                placeholder="UPI ID(Optional)"
                 spellCheck={false}
+                inputMode="email"
+                placeholder="e.g. yourname@okaxis or 9876543210@paytm"
                 value={upiId}
-                onChange={(event) => setUpiId(event.target.value)}
+                onChange={(e) => setUpiId(e.target.value)}
               />
-              <button className="btn-ghost rounded-xl py-2 text-xs sm:py-3 sm:text-base" disabled={saving} onClick={() => onSave(upiId)} type="button">
-                {saving ? "Saving..." : "Save UPI"}
-              </button>
-              <p className="mt-1 text-[11px] text-zinc-600 sm:text-xs">Use valid format like `name/phone@bank` or `phone@bank`</p>
             </div>
-          </motion.div>
-        ) : null}
-      </AnimatePresence>
-    </section>
+            <p className="text-[11px] text-zinc-500">
+              Adding your UPI ID allows other group members to pay you back directly with 1 tap or QR code.
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-2 pt-2">
+            <Button
+              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-sm text-sm font-semibold"
+              disabled={saving}
+              onClick={() => {
+                onSave(upiId);
+                onOpenChange(false);
+              }}
+            >
+              {saving ? "Saving..." : "Save UPI ID"}
+            </Button>
+
+            <Button
+              variant="ghost"
+              className="w-full text-xs text-zinc-600 hover:text-zinc-900 rounded-xl"
+              onClick={() => {
+                onOpenChange(false);
+                onChangePerson();
+              }}
+            >
+              Switch Person / Not {participant.name}?
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
+}
+
+// Keep backward compatible export
+export function ParticipantProfileCard(props) {
+  return <ParticipantProfileDialog {...props} />;
 }

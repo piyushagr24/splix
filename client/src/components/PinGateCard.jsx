@@ -1,31 +1,55 @@
 import { useState } from "react";
+import { Lock, ShieldCheck } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 export function PinGateCard({ onSubmit, loading }) {
   const [pin, setPin] = useState("");
 
   return (
-    <section className="reveal reveal-2 mx-auto max-w-md rounded-2xl border border-zinc-900/12 bg-white/90 p-4 shadow-sm sm:p-5">
-      <h2 className="text-base font-semibold text-zinc-900 sm:text-lg">Enter Group PIN</h2>
-      <p className="mt-1 text-xs text-zinc-700 sm:text-sm">This edit link is protected. Enter the 4-digit PIN to continue.</p>
+    <div className="mx-auto max-w-md rounded-3xl border border-zinc-200 bg-white/95 p-6 shadow-xl backdrop-blur-xl">
+      <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-800 mb-3">
+        <Lock className="h-6 w-6" />
+      </div>
+      <h2 className="text-xl font-bold text-center text-zinc-900">Protected Group</h2>
+      <p className="mt-1 text-center text-xs sm:text-sm text-zinc-500">
+        Enter the 4-digit PIN set when this group was created to unlock edit access.
+      </p>
+
       <form
-        className="mt-3 grid gap-3"
+        className="mt-6 space-y-4"
         onSubmit={(event) => {
           event.preventDefault();
-          onSubmit(pin);
+          if (pin.length === 4) {
+            onSubmit(pin);
+          }
         }}
       >
-        <input
-          className="input text-sm tracking-[0.32em] sm:text-lg"
-          value={pin}
-          maxLength={4}
-          inputMode="numeric"
-          placeholder="0000"
-          onChange={(event) => setPin(event.target.value.replace(/\D/g, ""))}
-        />
-        <button className="btn-primary px-4 py-2 text-xs sm:text-sm" disabled={loading || pin.length !== 4} type="submit">
-          {loading ? "Unlocking..." : "Unlock edit access"}
-        </button>
+        <div>
+          <Input
+            autoFocus
+            className="h-14 text-center font-mono text-2xl tracking-[0.5em] font-bold rounded-2xl"
+            value={pin}
+            maxLength={4}
+            inputMode="numeric"
+            placeholder="••••"
+            onChange={(event) => setPin(event.target.value.replace(/\D/g, ""))}
+          />
+        </div>
+
+        <Button
+          type="submit"
+          className="w-full h-11 text-sm font-semibold rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-md"
+          disabled={loading || pin.length !== 4}
+        >
+          {loading ? "Verifying PIN..." : "Unlock Group"}
+        </Button>
+
+        <div className="flex items-center justify-center gap-1.5 text-xs text-zinc-400">
+          <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
+          <span>7-day session token stored locally</span>
+        </div>
       </form>
-    </section>
+    </div>
   );
 }

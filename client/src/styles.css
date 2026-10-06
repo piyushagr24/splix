@@ -3,11 +3,28 @@
 @tailwind components;
 @tailwind utilities;
 
-
 @layer base {
   :root {
-    --accent-green: 22 163 74;
-    --accent-lime: 101 163 13;
+    --background: 0 0% 100%;
+    --foreground: 240 10% 3.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 3.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 3.9%;
+    --primary: 142.1 76.2% 36.3%; /* Emerald 600 */
+    --primary-foreground: 355.7 100% 97.3%;
+    --secondary: 240 4.8% 95.9%;
+    --secondary-foreground: 240 5.9% 10%;
+    --muted: 240 4.8% 95.9%;
+    --muted-foreground: 240 3.8% 46.1%;
+    --accent: 142.1 70% 95.5%; /* Emerald tint */
+    --accent-foreground: 142.1 76.2% 25%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 5.9% 90%;
+    --input: 240 5.9% 90%;
+    --ring: 142.1 76.2% 36.3%;
+    --radius: 0.85rem;
   }
 
   html,
@@ -24,8 +41,8 @@
     font-family: "Manrope", "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
     @apply bg-white text-zinc-900;
     background-image:
-      radial-gradient(circle at 14% 0%, rgba(22, 163, 74, 0.1), transparent 42%),
-      radial-gradient(circle at 86% 18%, rgba(101, 163, 13, 0.08), transparent 38%),
+      radial-gradient(circle at 14% 0%, rgba(22, 163, 74, 0.08), transparent 42%),
+      radial-gradient(circle at 86% 18%, rgba(101, 163, 13, 0.06), transparent 38%),
       linear-gradient(to right, rgba(24, 24, 27, 0.03) 1px, transparent 1px),
       linear-gradient(to bottom, rgba(24, 24, 27, 0.03) 1px, transparent 1px);
     background-size: auto, auto, 34px 34px, 34px 34px;
@@ -45,19 +62,19 @@ h3 {
 }
 
 .card {
-  @apply rounded-xl border border-zinc-200 bg-white/90 p-4 shadow-sm transition duration-300 hover:-translate-y-0.5 hover:shadow-md sm:p-5;
+  @apply rounded-2xl border border-zinc-200/90 bg-white/95 p-4 shadow-sm transition duration-300 hover:shadow-md sm:p-5;
 }
 
 .btn {
-  @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 font-semibold transition duration-200 active:scale-95 hover:-translate-y-0.5;
+  @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 font-semibold transition duration-200 active:scale-95;
 }
 
 .btn-primary {
-  @apply btn bg-emerald-600 text-white shadow-[0_10px_26px_rgba(22,163,74,0.35)] hover:bg-emerald-700;
+  @apply btn bg-emerald-600 text-white shadow-[0_10px_26px_rgba(22,163,74,0.3)] hover:bg-emerald-700;
 }
 
 .btn-ghost {
-  @apply btn border border-zinc-300 bg-white text-zinc-800 hover:bg-zinc-100;
+  @apply btn border border-zinc-200 bg-white text-zinc-800 hover:bg-zinc-50;
 }
 
 .input {
@@ -65,11 +82,7 @@ h3 {
 }
 
 .shell {
-  @apply relative mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8;
-}
-
-.hero-chip {
-  @apply inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-emerald-800;
+  @apply relative mx-auto max-w-5xl px-4 py-4 sm:px-6 sm:py-6;
 }
 
 .splix-toast {
@@ -114,7 +127,7 @@ h3 {
 @keyframes fade-up {
   from {
     opacity: 0;
-    transform: translateY(14px);
+    transform: translateY(12px);
   }
   to {
     opacity: 1;
@@ -123,23 +136,23 @@ h3 {
 }
 
 .reveal {
-  animation: fade-up 0.45s ease both;
+  animation: fade-up 0.35s ease both;
 }
 
 .reveal-1 {
-  animation-delay: 0.08s;
+  animation-delay: 0.06s;
 }
 
 .reveal-2 {
-  animation-delay: 0.16s;
+  animation-delay: 0.12s;
 }
 
 .reveal-3 {
-  animation-delay: 0.24s;
+  animation-delay: 0.18s;
 }
 
 .reveal-4 {
-  animation-delay: 0.32s;
+  animation-delay: 0.24s;
 }
 
 @media (prefers-reduced-motion: reduce) {

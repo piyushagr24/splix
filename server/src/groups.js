@@ -7,6 +7,7 @@ import { requireEditAuth } from "./auth.js";
 import { Expense } from "./models/Expense.js";
 import { Group } from "./models/Group.js";
 import { Participant } from "./models/Participant.js";
+import { Settlement } from "./models/Settlement.js";
 import { buildReceiptPdf } from "./pdf.js";
 import { getGroupByEditId, getGroupByViewId, getSnapshotByGroup } from "./snapshot.js";
 import { setNoCache } from "./http.js";
@@ -14,11 +15,16 @@ import { buildSplitJson } from "./split.js";
 import { normalizeUpiId, isValidUpiId } from "./upiValidation.js";
 import { validateBody } from "./validate.js";
 
+// joi is used to validate and sanitize incoming request date.
 const splitEntrySchema = Joi.object({
   participantId: Joi.string().required(),
   amountMinor: Joi.number().integer().min(0).optional(),
   percent: Joi.number().min(0).max(100).optional()
 });
+
+const categorySchema = Joi.string()
+  .valid("food", "transport", "stay", "groceries", "entertainment", "utilities", "general")
+  .default("general");
 
 const createGroupSchema = Joi.object({
   name: Joi.string().trim().min(1).max(50).required(),
@@ -41,7 +47,21 @@ const addExpenseSchema = Joi.object({
   split: Joi.object({
     mode: Joi.string().valid("even", "amount", "percentage").required(),
     entries: Joi.array().items(splitEntrySchema).min(1).required()
-  }).required()
+  }).required(),
+  category: categorySchema.optional(),
+  date: Joi.date().iso().optional()
+});
+
+const updateExpenseSchema = Joi.object({
+  title: Joi.string().trim().min(1).max(60).required(),
+  amountMinor: Joi.number().integer().min(1).required(),
+  paidByParticipantId: Joi.string().required(),
+  split: Joi.object({
+    mode: Joi.string().valid("even", "amount", "percentage").required(),
+    entries: Joi.array().items(splitEntrySchema).min(1).required()
+  }).required(),
+  category: categorySchema.optional(),
+  date: Joi.date().iso().optional()
 });
 
 const upiIdSchema = Joi.alternatives()
@@ -64,10 +84,23 @@ const upiIdSchema = Joi.alternatives()
     "upi.invalid": "Enter a valid UPI ID format like name@bank"
   });
 
+const addParticipantSchema = Joi.object({
+  name: Joi.string().trim().min(1).max(32).required(),
+  upiId: upiIdSchema.optional()
+});
+
 const patchParticipantSchema = Joi.object({
   name: Joi.string().trim().min(1).max(32).optional(),
   upiId: upiIdSchema.optional()
 }).min(1);
+
+const recordSettlementSchema = Joi.object({
+  fromParticipantId: Joi.string().required(),
+  toParticipantId: Joi.string().required(),
+  amountMinor: Joi.number().integer().min(1).required(),
+  note: Joi.string().trim().max(100).allow("").optional(),
+  date: Joi.date().iso().optional()
+});
 
 const patchSettlementSchema = Joi.object({
   fromParticipantId: Joi.string().required(),
@@ -174,7 +207,9 @@ async function addExpense(req, res) {
     title: req.body.title,
     amountMinor: req.body.amountMinor,
     paidByParticipantId: req.body.paidByParticipantId,
-    splitJson
+    splitJson,
+    category: req.body.category || "general",
+    date: req.body.date ? new Date(req.body.date) : new Date()
   });
 
   await touchGroupActivity(group._id);
@@ -186,6 +221,56 @@ async function addExpense(req, res) {
     amountMinor: expense.amountMinor,
     paidByParticipantId: String(expense.paidByParticipantId),
     splitJson: expense.splitJson,
+    category: expense.category,
+    date: expense.date ? expense.date.toISOString() : expense.createdAt.toISOString(),
+    createdAt: expense.createdAt
+  });
+}
+
+async function updateExpense(req, res) {
+  const { editId, expenseId } = req.params;
+  const group = await getGroupByEditId(editId);
+  if (!group) return res.status(404).json({ error: "Group not found" });
+
+  const expense = await Expense.findOne({ _id: expenseId, groupId: group._id });
+  if (!expense) return res.status(404).json({ error: "Expense not found" });
+
+  const participants = await Participant.find({ groupId: group._id }).lean();
+  const participantsById = new Map(participants.map((participant) => [String(participant._id), participant]));
+  if (!participantsById.has(req.body.paidByParticipantId)) {
+    return res.status(400).json({ error: "Invalid payer participant" });
+  }
+
+  let splitJson;
+  try {
+    splitJson = buildSplitJson({
+      amountMinor: req.body.amountMinor,
+      split: req.body.split,
+      participantsById
+    });
+  } catch (error) {
+    return res.status(400).json({ error: error.message });
+  }
+
+  expense.title = req.body.title;
+  expense.amountMinor = req.body.amountMinor;
+  expense.paidByParticipantId = req.body.paidByParticipantId;
+  expense.splitJson = splitJson;
+  if (req.body.category) expense.category = req.body.category;
+  if (req.body.date) expense.date = new Date(req.body.date);
+  await expense.save();
+
+  await touchGroupActivity(group._id);
+
+  return res.json({
+    id: String(expense._id),
+    groupId: String(expense.groupId),
+    title: expense.title,
+    amountMinor: expense.amountMinor,
+    paidByParticipantId: String(expense.paidByParticipantId),
+    splitJson: expense.splitJson,
+    category: expense.category,
+    date: expense.date ? expense.date.toISOString() : expense.createdAt.toISOString(),
     createdAt: expense.createdAt
   });
 }
@@ -198,6 +283,39 @@ async function deleteExpense(req, res) {
   if (!deleted) return res.status(404).json({ error: "Expense not found" });
   await touchGroupActivity(group._id);
   return res.status(204).send();
+}
+
+async function addParticipant(req, res) {
+  const { editId } = req.params;
+  const group = await getGroupByEditId(editId);
+  if (!group) return res.status(404).json({ error: "Group not found" });
+
+  const name = req.body.name.trim();
+  // Check for duplicate name in group (case-insensitive)
+  const existing = await Participant.findOne({
+    groupId: group._id,
+    name: { $regex: new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i") }
+  }).lean();
+
+  if (existing) {
+    return res.status(400).json({ error: `A participant named "${name}" already exists` });
+  }
+
+  const participant = await Participant.create({
+    groupId: group._id,
+    name,
+    upiId: req.body.upiId || null
+  });
+
+  await touchGroupActivity(group._id);
+
+  return res.status(201).json({
+    id: String(participant._id),
+    groupId: String(participant.groupId),
+    name: participant.name,
+    upiId: participant.upiId,
+    createdAt: participant.createdAt
+  });
 }
 
 async function patchParticipant(req, res) {
@@ -224,6 +342,59 @@ async function patchParticipant(req, res) {
     upiId: participant.upiId,
     createdAt: participant.createdAt
   });
+}
+
+async function recordSettlement(req, res) {
+  const { editId } = req.params;
+  const group = await getGroupByEditId(editId);
+  if (!group) return res.status(404).json({ error: "Group not found" });
+
+  const { fromParticipantId, toParticipantId, amountMinor, note, date } = req.body;
+  if (fromParticipantId === toParticipantId) {
+    return res.status(400).json({ error: "Payer and payee cannot be the same person" });
+  }
+
+  const participants = await Participant.find({ groupId: group._id }).lean();
+  const participantsById = new Map(participants.map((p) => [String(p._id), p]));
+  if (!participantsById.has(fromParticipantId) || !participantsById.has(toParticipantId)) {
+    return res.status(400).json({ error: "Invalid participant selected for settlement" });
+  }
+
+  const settlement = await Settlement.create({
+    groupId: group._id,
+    fromParticipantId,
+    toParticipantId,
+    amountMinor,
+    note: note || "",
+    date: date ? new Date(date) : new Date()
+  });
+
+  await touchGroupActivity(group._id);
+
+  return res.status(201).json({
+    id: String(settlement._id),
+    groupId: String(settlement.groupId),
+    fromParticipantId: String(settlement.fromParticipantId),
+    fromName: participantsById.get(fromParticipantId).name,
+    toParticipantId: String(settlement.toParticipantId),
+    toName: participantsById.get(toParticipantId).name,
+    amountMinor: settlement.amountMinor,
+    note: settlement.note,
+    date: settlement.date.toISOString(),
+    createdAt: settlement.createdAt
+  });
+}
+
+async function deleteSettlement(req, res) {
+  const { editId, settlementId } = req.params;
+  const group = await getGroupByEditId(editId);
+  if (!group) return res.status(404).json({ error: "Group not found" });
+
+  const deleted = await Settlement.findOneAndDelete({ _id: settlementId, groupId: group._id });
+  if (!deleted) return res.status(404).json({ error: "Settlement record not found" });
+
+  await touchGroupActivity(group._id);
+  return res.status(204).send();
 }
 
 async function patchSettlement(req, res) {
@@ -270,13 +441,26 @@ const router = express.Router();
 router.post("/groups", validateBody(createGroupSchema), createGroup);
 router.get("/groups/view/:viewId", viewSnapshotLimiter, getViewSnapshot);
 router.get("/groups/edit/:editId", requireEditAuth, getEditSnapshot);
+router.post("/groups/edit/:editId/participants", requireEditAuth, validateBody(addParticipantSchema), addParticipant);
 router.post("/groups/edit/:editId/expenses", requireEditAuth, validateBody(addExpenseSchema), addExpense);
+router.put("/groups/edit/:editId/expenses/:expenseId", requireEditAuth, validateBody(updateExpenseSchema), updateExpense);
 router.delete("/groups/edit/:editId/expenses/:expenseId", requireEditAuth, deleteExpense);
 router.patch(
   "/groups/edit/:editId/participants/:participantId",
   requireEditAuth,
   validateBody(patchParticipantSchema),
   patchParticipant
+);
+router.post(
+  "/groups/edit/:editId/settlements",
+  requireEditAuth,
+  validateBody(recordSettlementSchema),
+  recordSettlement
+);
+router.delete(
+  "/groups/edit/:editId/settlements/:settlementId",
+  requireEditAuth,
+  deleteSettlement
 );
 router.patch(
   "/groups/edit/:editId/settlements",

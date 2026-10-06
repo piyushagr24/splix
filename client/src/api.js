@@ -70,10 +70,26 @@ function addExpense(editId, token, payload) {
   });
 }
 
+function updateExpense(editId, expenseId, token, payload) {
+  return apiRequest(`/api/groups/edit/${editId}/expenses/${expenseId}`, {
+    method: "PUT",
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(payload)
+  });
+}
+
 function deleteExpense(editId, expenseId, token) {
   return apiRequest(`/api/groups/edit/${editId}/expenses/${expenseId}`, {
     method: "DELETE",
     headers: { Authorization: `Bearer ${token}` }
+  });
+}
+
+function addParticipant(editId, token, payload) {
+  return apiRequest(`/api/groups/edit/${editId}/participants`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(payload)
   });
 }
 
@@ -82,6 +98,21 @@ function updateParticipant(editId, participantId, token, payload) {
     method: "PATCH",
     headers: { Authorization: `Bearer ${token}` },
     body: JSON.stringify(payload)
+  });
+}
+
+function recordSettlement(editId, token, payload) {
+  return apiRequest(`/api/groups/edit/${editId}/settlements`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(payload)
+  });
+}
+
+function deleteSettlement(editId, settlementId, token) {
+  return apiRequest(`/api/groups/edit/${editId}/settlements/${settlementId}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` }
   });
 }
 
@@ -100,13 +131,17 @@ function pdfDownloadUrl(viewId) {
 export {
   API_BASE_URL,
   addExpense,
+  addParticipant,
   apiRequest,
   createGroup,
   createSession,
   deleteExpense,
+  deleteSettlement,
   fetchEditSnapshot,
   fetchViewSnapshot,
   pdfDownloadUrl,
+  recordSettlement,
+  updateExpense,
   updateParticipant,
   updateSettlement,
   warmApi

@@ -1,4 +1,4 @@
-export function deriveBalances(participants, expenses) {
+export function deriveBalances(participants, expenses, settlements = []) {
   const rows = new Map(
     participants.map((participant) => [
       String(participant.id || participant._id),
@@ -21,6 +21,14 @@ export function deriveBalances(participants, expenses) {
       if (!row) continue;
       row.netMinor -= Number(share || 0);
     }
+  }
+
+  // Offset balances with formal settlement reimbursements
+  for (const settlement of settlements) {
+    const payer = rows.get(String(settlement.fromParticipantId));
+    const payee = rows.get(String(settlement.toParticipantId));
+    if (payer) payer.netMinor += Number(settlement.amountMinor || 0);
+    if (payee) payee.netMinor -= Number(settlement.amountMinor || 0);
   }
 
   return Array.from(rows.values());

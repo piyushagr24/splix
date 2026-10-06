@@ -1,7 +1,23 @@
 import { useEffect, useRef, useState } from "react";
-import { motion } from "framer-motion";
-import { ChevronDown, ChevronUp } from "lucide-react";
-import { sortByName } from "../utils/sort";
+import {
+  Calendar,
+  Check,
+  ChevronDown,
+  ChevronUp,
+  DollarSign,
+  Layers,
+  Percent,
+  Plus,
+  Save,
+  Users,
+  Wallet
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { sortByName } from "@/utils/sort";
+import { CATEGORIES, getCategory } from "@/utils/categories";
 
 function isNumericDraft(value) {
   return /^\d*\.?\d*$/.test(value);
@@ -61,14 +77,31 @@ export function AddExpenseCard({
   participants,
   currency,
   defaultPayerId,
+  initialExpense = null,
   onAdd,
+  onUpdate,
   disabled,
-  adding
+  adding,
+  onSuccess,
+  onCancel
 }) {
   const sortedParticipants = sortByName(participants);
-  const [title, setTitle] = useState("");
-  const [amount, setAmount] = useState("");
-  const [paidByParticipantId, setPaidByParticipantId] = useState(defaultPayerId || "");
+  const isEditMode = Boolean(initialExpense);
+
+  const [title, setTitle] = useState(initialExpense?.title || "");
+  const [amount, setAmount] = useState(
+    initialExpense ? (initialExpense.amountMinor / 100).toFixed(2).replace(/\.00$/, "") : ""
+  );
+  const [paidByParticipantId, setPaidByParticipantId] = useState(
+    initialExpense?.paidByParticipantId || defaultPayerId || ""
+  );
+  const [category, setCategory] = useState(initialExpense?.category || "general");
+  const [date, setDate] = useState(
+    initialExpense?.date
+      ? initialExpense.date.slice(0, 10)
+      : new Date().toISOString().slice(0, 10)
+  );
+
   const [mode, setMode] = useState("even");
   const [selectedIds, setSelectedIds] = useState([]);
   const [amountMap, setAmountMap] = useState({});
@@ -79,13 +112,38 @@ export function AddExpenseCard({
   const knownParticipantIdsRef = useRef([]);
 
   useEffect(() => {
+    if (initialExpense) {
+      setTitle(initialExpense.title || "");
+      setAmount((initialExpense.amountMinor / 100).toFixed(2).replace(/\.00$/, ""));
+      setPaidByParticipantId(initialExpense.paidByParticipantId || defaultPayerId || "");
+      setCategory(initialExpense.category || "general");
+      setDate(
+        initialExpense.date
+          ? initialExpense.date.slice(0, 10)
+          : new Date().toISOString().slice(0, 10)
+      );
+
+      const splitKeys = Object.keys(initialExpense.splitJson || {});
+      if (splitKeys.length > 0) {
+        setSelectedIds(splitKeys);
+        // Pre-fill amountMap
+        const newAmountMap = {};
+        for (const [pId, shareMinor] of Object.entries(initialExpense.splitJson)) {
+          newAmountMap[pId] = (shareMinor / 100).toFixed(2);
+        }
+        setAmountMap(newAmountMap);
+      }
+    }
+  }, [initialExpense, defaultPayerId]);
+
+  useEffect(() => {
+    if (isEditMode) return;
     const participantIds = sortedParticipants.map((participant) => participant.id);
     const previousIds = knownParticipantIdsRef.current;
     const previousIdSet = new Set(previousIds);
 
     setSelectedIds((current) => {
       if (!current.length) return participantIds;
-
       const participantIdSet = new Set(participantIds);
       const retained = current.filter((id) => participantIdSet.has(id));
       const added = participantIds.filter((id) => !previousIdSet.has(id));
@@ -93,13 +151,13 @@ export function AddExpenseCard({
     });
 
     knownParticipantIdsRef.current = participantIds;
-  }, [participants]);
+  }, [participants, isEditMode]);
 
   useEffect(() => {
-    if (defaultPayerId) {
+    if (!isEditMode && defaultPayerId && !paidByParticipantId) {
       setPaidByParticipantId(defaultPayerId);
     }
-  }, [defaultPayerId]);
+  }, [defaultPayerId, isEditMode, paidByParticipantId]);
 
   useEffect(() => {
     setDetailsOpen(mode !== "even");
@@ -111,6 +169,10 @@ export function AddExpenseCard({
         ? current.filter((item) => item !== participantId)
         : [...current, participantId]
     );
+  }
+
+  function selectAll() {
+    setSelectedIds(sortedParticipants.map((p) => p.id));
   }
 
   function updateNumericField(value, setter, errorKey, message) {
@@ -144,144 +206,342 @@ export function AddExpenseCard({
       percentMap
     });
 
-    await onAdd({
+    const payload = {
       title: title.trim(),
       amountMinor,
       paidByParticipantId,
+      category,
+      date: date ? new Date(date).toISOString() : new Date().toISOString(),
       split: { mode, entries: splitEntries },
       splitJson
-    });
+    };
 
-    setTitle("");
-    setAmount("");
-    setPaidByParticipantId(defaultPayerId || "");
-    setSelectedIds(sortedParticipants.map((participant) => participant.id));
-    setAmountMap({});
-    setPercentMap({});
-    setDetailsOpen(false);
-    setAmountError("");
-    setFieldErrors({});
+    if (isEditMode && onUpdate) {
+      await onUpdate(initialExpense.id, payload);
+    } else {
+      await onAdd(payload);
+    }
+
+    if (!isEditMode) {
+      setTitle("");
+      setAmount("");
+      setPaidByParticipantId(defaultPayerId || "");
+      setSelectedIds(sortedParticipants.map((p) => p.id));
+      setCategory("general");
+      setDate(new Date().toISOString().slice(0, 10));
+      setAmountMap({});
+      setPercentMap({});
+      setDetailsOpen(false);
+      setAmountError("");
+      setFieldErrors({});
+    }
+
+    if (onSuccess) {
+      onSuccess();
+    }
   }
 
+  const perPersonShare =
+    mode === "even" && selectedIds.length > 0 && toMinor(amount) > 0
+      ? (toMinor(amount) / selectedIds.length / 100).toFixed(2)
+      : null;
+
   return (
-    <motion.section
-      className="card reveal reveal-2"
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.24, ease: "easeOut" }}
-    >
-      <h2 className="text-base font-semibold text-zinc-900 sm:text-xl">Add Expense</h2>
+    <form className="space-y-4" onSubmit={submit}>
+      <div className="space-y-3">
+        {/* Title input */}
+        <div>
+          <label className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
+            Expense Title
+          </label>
+          <Input
+            autoFocus={!isEditMode}
+            className="mt-1 text-sm sm:text-base font-medium"
+            maxLength={60}
+            placeholder="Dinner, Cab ride, Groceries..."
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+          />
+        </div>
 
-      <form className="mt-4 grid gap-3 sm:mt-5 sm:gap-4" onSubmit={submit}>
-        <div className="grid gap-2.5 md:grid-cols-3 md:gap-3">
-          <input className="input h-10 text-xs sm:h-12 sm:text-base" maxLength={60} placeholder="Title" value={title} onChange={(event) => setTitle(event.target.value)} />
+        {/* Amount & Currency */}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
-            <input
-              className="input h-10 text-xs sm:h-12 sm:text-base"
-              inputMode="decimal"
-              placeholder={`Amount (${currency})`}
-              value={amount}
-              onChange={(event) => {
-                const value = event.target.value;
-                setAmount(value);
-                setAmountError(value === "" || isNumericDraft(value) ? "" : "Use numbers only");
-              }}
-            />
-            {amountError ? <p className="mt-1 text-[11px] text-rose-600 sm:text-xs">{amountError}</p> : null}
+            <label className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
+              Amount ({currency})
+            </label>
+            <div className="relative mt-1">
+              <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-zinc-400 font-semibold text-sm">
+                {currency}
+              </span>
+              <Input
+                className="pl-14 text-sm sm:text-base font-bold"
+                inputMode="decimal"
+                placeholder="0.00"
+                value={amount}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setAmount(val);
+                  setAmountError(val === "" || isNumericDraft(val) ? "" : "Numbers only");
+                }}
+              />
+            </div>
+            {amountError && <p className="mt-1 text-xs text-rose-600">{amountError}</p>}
           </div>
-          <select
-            className="input h-10 text-xs sm:h-12 sm:text-base"
-            value={paidByParticipantId}
-            onChange={(event) => setPaidByParticipantId(event.target.value)}
+
+          {/* Paid by selection */}
+          <div>
+            <label className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
+              Paid By
+            </label>
+            <div className="relative mt-1">
+              <select
+                className="flex h-11 w-full rounded-xl border border-zinc-300 bg-white px-3.5 py-2 text-sm font-medium text-zinc-900 outline-none transition focus:border-emerald-600 focus:ring-2 focus:ring-emerald-200"
+                value={paidByParticipantId}
+                onChange={(e) => setPaidByParticipantId(e.target.value)}
+              >
+                {sortedParticipants.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
+
+        {/* Category & Date in 2 columns */}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {/* Category Picker */}
+          <div>
+            <label className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
+              Category
+            </label>
+            <div className="relative mt-1">
+              <select
+                className="flex h-11 w-full rounded-xl border border-zinc-300 bg-white px-3.5 py-2 text-sm font-medium text-zinc-900 outline-none transition focus:border-emerald-600 focus:ring-2 focus:ring-emerald-200"
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+              >
+                {CATEGORIES.map((cat) => (
+                  <option key={cat.id} value={cat.id}>
+                    {cat.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Expense Date Picker */}
+          <div>
+            <label className="text-xs font-semibold uppercase tracking-wider text-zinc-500 flex items-center gap-1">
+              <Calendar className="h-3 w-3" />
+              <span>Expense Date</span>
+            </label>
+            <div className="relative mt-1">
+              <Input
+                type="date"
+                className="h-11 text-sm font-medium"
+                value={date}
+                max={new Date().toISOString().slice(0, 10)}
+                onChange={(e) => setDate(e.target.value)}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Quick Category Chips */}
+        <div className="flex flex-wrap gap-1.5 pt-0.5">
+          {CATEGORIES.map((cat) => {
+            const Icon = cat.icon;
+            const isSelected = category === cat.id;
+            return (
+              <button
+                key={cat.id}
+                type="button"
+                className={`inline-flex items-center gap-1 rounded-xl px-2.5 py-1 text-xs font-medium border transition-all ${
+                  isSelected
+                    ? "border-emerald-500 bg-emerald-50 text-emerald-800 ring-1 ring-emerald-500/30 font-semibold"
+                    : "border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300"
+                }`}
+                onClick={() => setCategory(cat.id)}
+              >
+                <Icon className={`h-3 w-3 ${isSelected ? "text-emerald-700" : "text-zinc-500"}`} />
+                <span>{cat.shortLabel}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Split Mode Selector */}
+      <div className="rounded-2xl border border-zinc-200/90 bg-zinc-50/70 p-3 sm:p-4">
+        <div className="flex items-center justify-between">
+          <label className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
+            Split Method
+          </label>
+          {perPersonShare && (
+            <Badge variant="success" className="text-[11px]">
+              {currency} {perPersonShare} / person
+            </Badge>
+          )}
+        </div>
+
+        <div className="mt-2.5 grid grid-cols-3 gap-1.5 sm:gap-2">
+          <button
+            type="button"
+            className={`flex items-center justify-center gap-1.5 rounded-xl py-2 px-2 text-xs sm:text-sm font-semibold transition-all ${
+              mode === "even"
+                ? "bg-white text-emerald-800 shadow-sm border border-emerald-300 ring-2 ring-emerald-500/20"
+                : "text-zinc-600 hover:bg-white/60"
+            }`}
+            onClick={() => setMode("even")}
           >
-            {sortedParticipants.map((participant) => (
-              <option key={participant.id} value={participant.id}>
-                {participant.name} paid
-              </option>
-            ))}
-          </select>
+            <Layers className="h-3.5 w-3.5" />
+            <span>Equally</span>
+          </button>
+          <button
+            type="button"
+            className={`flex items-center justify-center gap-1.5 rounded-xl py-2 px-2 text-xs sm:text-sm font-semibold transition-all ${
+              mode === "amount"
+                ? "bg-white text-emerald-800 shadow-sm border border-emerald-300 ring-2 ring-emerald-500/20"
+                : "text-zinc-600 hover:bg-white/60"
+            }`}
+            onClick={() => setMode("amount")}
+          >
+            <DollarSign className="h-3.5 w-3.5" />
+            <span>By Amount</span>
+          </button>
+          <button
+            type="button"
+            className={`flex items-center justify-center gap-1.5 rounded-xl py-2 px-2 text-xs sm:text-sm font-semibold transition-all ${
+              mode === "percentage"
+                ? "bg-white text-emerald-800 shadow-sm border border-emerald-300 ring-2 ring-emerald-500/20"
+                : "text-zinc-600 hover:bg-white/60"
+            }`}
+            onClick={() => setMode("percentage")}
+          >
+            <Percent className="h-3.5 w-3.5" />
+            <span>By %</span>
+          </button>
         </div>
 
-        <div className="rounded-2xl border border-zinc-200 p-3 sm:p-4">
-          <p className="text-xs font-medium text-zinc-900 sm:text-sm">Split Type</p>
-          <div className="mt-3 flex flex-wrap gap-3 text-xs text-zinc-900 sm:gap-4 sm:text-sm">
-            <label className="flex items-center gap-2">
-              <input checked={mode === "even"} name="splitMode" onChange={() => setMode("even")} type="radio" />
-              Even
-            </label>
-            <label className="flex items-center gap-2">
-              <input checked={mode === "amount"} name="splitMode" onChange={() => setMode("amount")} type="radio" />
-              Uneven (Amount)
-            </label>
-            <label className="flex items-center gap-2">
-              <input checked={mode === "percentage"} name="splitMode" onChange={() => setMode("percentage")} type="radio" />
-              Uneven (Percentage)
-            </label>
-          </div>
-
-          <div className="mt-4 sm:mt-5">
+        {/* Participants Selector Toggle */}
+        <div className="mt-3.5 border-t border-zinc-200/80 pt-3">
+          <div className="flex items-center justify-between">
             <button
-              className="inline-flex items-center gap-2 text-xs font-medium text-zinc-900 sm:text-sm"
-              onClick={() => setDetailsOpen((current) => !current)}
               type="button"
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-zinc-700 hover:text-zinc-900"
+              onClick={() => setDetailsOpen((c) => !c)}
             >
-              {detailsOpen ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
-              Select Participants in this Split
+              <Users className="h-3.5 w-3.5 text-emerald-600" />
+              <span>Split across {selectedIds.length} of {sortedParticipants.length} people</span>
+              {detailsOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
             </button>
-            {detailsOpen ? (
-              <div className="mt-3 grid gap-2.5 md:grid-cols-2 md:gap-3">
-                  {sortedParticipants.map((participant) => {
-                    const checked = selectedIds.includes(participant.id);
-                    return (
-                      <div key={participant.id} className="rounded-xl border border-zinc-200 px-3 py-2">
-                        <label className="flex items-center gap-2.5 text-xs text-zinc-900 sm:gap-3 sm:text-base">
-                          <input checked={checked} onChange={() => toggleParticipant(participant.id)} type="checkbox" />
-                          <span>{participant.name}</span>
-                        </label>
-                        {checked && mode !== "even" ? (
-                          <>
-                            <input
-                              className="input mt-2.5 text-sm sm:mt-3 sm:text-base"
-                              inputMode="decimal"
-                              placeholder={mode === "amount" ? "Share amount" : "Share %"}
-                              value={mode === "amount" ? amountMap[participant.id] || "" : percentMap[participant.id] || ""}
-                              onChange={(event) => {
-                                if (mode === "amount") {
-                                  updateNumericField(
-                                    event.target.value,
-                                    (value) => setAmountMap((current) => ({ ...current, [participant.id]: value })),
-                                    `amount-${participant.id}`,
-                                    "Use numbers only"
-                                  );
-                                  return;
-                                }
-                                updateNumericField(
-                                  event.target.value,
-                                  (value) => setPercentMap((current) => ({ ...current, [participant.id]: value })),
-                                  `percent-${participant.id}`,
-                                  "Use numbers only"
-                                );
-                              }}
-                            />
-                            {fieldErrors[mode === "amount" ? `amount-${participant.id}` : `percent-${participant.id}`] ? (
-                              <p className="mt-1 text-[11px] text-rose-600 sm:text-xs">
-                                {fieldErrors[mode === "amount" ? `amount-${participant.id}` : `percent-${participant.id}`]}
-                              </p>
-                            ) : null}
-                          </>
-                        ) : null}
-                      </div>
-                    );
-                  })}
-              </div>
-            ) : null}
+            {detailsOpen && selectedIds.length !== sortedParticipants.length && (
+              <button
+                type="button"
+                className="text-xs font-semibold text-emerald-700 hover:underline"
+                onClick={selectAll}
+              >
+                Select all
+              </button>
+            )}
           </div>
-        </div>
 
-        <button className="btn-primary w-fit rounded-xl px-4 py-2 text-xs font-semibold sm:text-sm" disabled={disabled || adding} type="submit">
-          {adding ? "Adding..." : "Add"}
-        </button>
-      </form>
-    </motion.section>
+          {detailsOpen && (
+            <div className="mt-3 grid gap-2 max-h-56 overflow-y-auto pr-1">
+              {sortedParticipants.map((p) => {
+                const checked = selectedIds.includes(p.id);
+                return (
+                  <div
+                    key={p.id}
+                    className={`flex items-center justify-between rounded-xl border p-2 sm:p-2.5 transition-all ${
+                      checked
+                        ? "border-emerald-200 bg-white"
+                        : "border-zinc-200 bg-zinc-50/50 opacity-60"
+                    }`}
+                  >
+                    <label className="flex flex-1 cursor-pointer items-center gap-2.5 text-xs sm:text-sm font-medium text-zinc-900">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleParticipant(p.id)}
+                        className="h-4 w-4 rounded text-emerald-600 focus:ring-emerald-500"
+                      />
+                      <Avatar className="h-6 w-6">
+                        <AvatarFallback className="text-[10px] bg-emerald-100 text-emerald-800">
+                          {p.name.slice(0, 2).toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
+                      <span>{p.name}</span>
+                    </label>
+
+                    {checked && mode !== "even" && (
+                      <div className="w-28">
+                        <Input
+                          className="h-8 text-xs font-semibold text-right"
+                          inputMode="decimal"
+                          placeholder={mode === "amount" ? `${currency} 0.00` : "%"}
+                          value={mode === "amount" ? amountMap[p.id] || "" : percentMap[p.id] || ""}
+                          onChange={(e) => {
+                            if (mode === "amount") {
+                              updateNumericField(
+                                e.target.value,
+                                (val) => setAmountMap((c) => ({ ...c, [p.id]: val })),
+                                `amount-${p.id}`,
+                                "Numbers only"
+                              );
+                            } else {
+                              updateNumericField(
+                                e.target.value,
+                                (val) => setPercentMap((c) => ({ ...c, [p.id]: val })),
+                                `percent-${p.id}`,
+                                "Numbers only"
+                              );
+                            }
+                          }}
+                        />
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Action Buttons */}
+      <div className="flex gap-2">
+        {isEditMode && onCancel && (
+          <Button
+            type="button"
+            variant="outline"
+            className="flex-1 h-11 text-sm font-semibold rounded-xl"
+            onClick={onCancel}
+          >
+            Cancel
+          </Button>
+        )}
+        <Button
+          type="submit"
+          className="flex-1 h-11 text-sm font-semibold rounded-xl bg-emerald-600 hover:bg-emerald-700 shadow-md text-white"
+          disabled={disabled || adding || !title.trim() || toMinor(amount) <= 0 || selectedIds.length === 0}
+        >
+          {isEditMode ? (
+            <>
+              <Save className="h-4 w-4 mr-1.5" />
+              {adding ? "Saving Changes..." : "Update Expense"}
+            </>
+          ) : (
+            <>
+              <Plus className="h-4 w-4 mr-1" />
+              {adding ? "Adding Expense..." : "Add Expense"}
+            </>
+          )}
+        </Button>
+      </div>
+    </form>
   );
 }

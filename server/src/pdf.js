@@ -6,7 +6,7 @@ const SPLIX_URL = "https://splix-app.vercel.app";
 function safeText(value) {
   return String(value || "")
     .normalize("NFKD")
-    .replace(/[^\x20-\x7E]/g, "");
+    .replace(/[^\x20-\x7E]/g, ""); // remove non-ASCII chars
 }
 
 function formatDateTime(iso) {
@@ -54,7 +54,7 @@ export async function buildReceiptPdf(snapshot) {
   const gross = snapshot.expenses.reduce((sum, expense) => sum + expense.amountMinor, 0);
   const orderedExpenses = snapshot.expenses
     .slice()
-    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    .sort((a, b) => new Date(a.date || a.createdAt).getTime() - new Date(b.date || b.createdAt).getTime());
 
   let y = height - 24;
   const lineGap = 12;
@@ -129,7 +129,8 @@ export async function buildReceiptPdf(snapshot) {
     line(`${idx + 1}. ${expense.title}`, true);
     line(`   Amt : ${formatMoney(expense.amountMinor, snapshot.group.currency)}`);
     line(`   By  : ${payer}`);
-    line(`   At  : ${formatDateTime(expense.createdAt)}`, false, 8, muted);
+    line(`   Cat : ${(expense.category || "general").toUpperCase()}`);
+    line(`   At  : ${formatDateTime(expense.date || expense.createdAt)}`, false, 8, muted);
     Object.entries(expense.splitJson || {})
       .sort((a, b) => {
         const aName = participantById.get(a[0])?.name || "";
@@ -146,7 +147,17 @@ export async function buildReceiptPdf(snapshot) {
   line(`Gross Total : ${formatMoney(gross, snapshot.group.currency)}`, true);
   divider("=");
 
-  line("FINAL SETTLEMENTS", true);
+  if (snapshot.settlementHistory && snapshot.settlementHistory.length > 0) {
+    line("COMPLETED REIMBURSEMENTS", true);
+    divider();
+    snapshot.settlementHistory.forEach((s, idx) => {
+      line(`${idx + 1}) ${s.fromName} -> ${s.toName} : ${formatMoney(s.amountMinor, snapshot.group.currency)}`);
+      line(`   At : ${formatDateTime(s.date || s.createdAt)}${s.note ? ` (${s.note})` : ""}`, false, 8, muted);
+    });
+    divider();
+  }
+
+  line("OUTSTANDING SETTLEMENTS", true);
   divider();
   if (!snapshot.settlements.length) {
     line("All balances are settled.");
