@@ -1,22 +1,56 @@
 import mongoose from "mongoose";
 
-let connectionPromise = null;
+// Use global cache for serverless environments to reuse connection across warm lambda invocations
+let cached = global.mongoose;
 
-export async function connectDb(mongodbUri) {
-  if (mongoose.connection.readyState === 1) {
-    return mongoose.connection;
+if (!cached) {
+  cached = global.mongoose = { conn: null, promise: null };
+}
+
+export async function connectDb(mongodbUri, options = {}) {
+  if (cached.conn && mongoose.connection.readyState === 1) {
+    return cached.conn;
   }
 
-  if (!connectionPromise) {
+  if (!cached.promise) {
     mongoose.set("strictQuery", true);
-    connectionPromise = mongoose.connect(mongodbUri);
+
+    const poolSize = Number(process.env.MONGODB_MAX_POOL_SIZE || 10);
+    const connectionOptions = {
+      maxPoolSize: poolSize,
+      minPoolSize: 0,
+      serverSelectionTimeoutMS: 5000,
+      socketTimeoutMS: 45000,
+      connectTimeoutMS: 10000,
+      family: 4,
+      ...options
+    };
+
+    cached.promise = mongoose.connect(mongodbUri, connectionOptions)
+      .then((m) => {
+        return m.connection;
+      })
+      .catch((err) => {
+        cached.promise = null;
+        throw err;
+      });
   }
 
   try {
-    await connectionPromise;
-    return mongoose.connection;
+    cached.conn = await cached.promise;
+    return cached.conn;
   } catch (error) {
-    connectionPromise = null;
+    cached.promise = null;
+    cached.conn = null;
     throw error;
   }
 }
+
+export async function disconnectDb() {
+  if (mongoose.connection.readyState !== 0) {
+    await mongoose.disconnect();
+  }
+  cached.conn = null;
+  cached.promise = null;
+}
+

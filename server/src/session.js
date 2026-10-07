@@ -1,10 +1,10 @@
 import bcrypt from "bcryptjs"; 
 import express from "express";
-import rateLimit from "express-rate-limit";
 import jwt from "jsonwebtoken"; 
 import Joi from "joi"; // For validating request bodies
 import { env } from "./env.js";
 import { Group } from "./models/Group.js";
+import { authLimiter } from "./rateLimiter.js";
 import { validateBody } from "./validate.js";
 
 
@@ -34,17 +34,9 @@ async function createSession(req, res) {
   return res.status(200).json({ token });
 }
 
-// rate limit to prevent pin brute force 
-const sessionLimiter = rateLimit({
-  windowMs: 60 * 1000,
-  max: 8,
-  standardHeaders: true,
-  legacyHeaders: false
-});
-
 const router = express.Router();
 
-// Route for creating a new session. It applies rate limiting and body validation middleware before calling the createSession handler.
-router.post("/session", sessionLimiter, validateBody(sessionSchema), createSession);
+// Route for creating a new session. It applies proxy-safe rate limiting and body validation middleware before calling the createSession handler.
+router.post("/session", authLimiter, validateBody(sessionSchema), createSession);
 
 export default router;

@@ -1,6 +1,5 @@
 import bcrypt from "bcryptjs";
 import express from "express";
-import rateLimit from "express-rate-limit";
 import Joi from "joi";
 import { nanoid } from "nanoid";
 import { requireEditAuth } from "./auth.js";
@@ -9,6 +8,7 @@ import { Group } from "./models/Group.js";
 import { Participant } from "./models/Participant.js";
 import { Settlement } from "./models/Settlement.js";
 import { buildReceiptPdf } from "./pdf.js";
+import { mutationLimiter, pdfLimiter, snapshotLimiter } from "./rateLimiter.js";
 import { getGroupByEditId, getGroupByViewId, getSnapshotByGroup } from "./snapshot.js";
 import { setNoCache } from "./http.js";
 import { buildSplitJson } from "./split.js";
@@ -109,21 +109,7 @@ const patchSettlementSchema = Joi.object({
   settled: Joi.boolean().required()
 });
 
-const viewSnapshotLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 1500,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: "Too many view requests. Please try again shortly." }
-});
 
-const viewPdfLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 60,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: "Too many PDF requests. Please try again shortly." }
-});
 
 async function touchGroupActivity(groupId) {
   await Group.updateOne({ _id: groupId }, { $set: { lastActivityAt: new Date() } });
@@ -438,36 +424,40 @@ async function getViewPdf(req, res) {
 }
 
 const router = express.Router();
-router.post("/groups", validateBody(createGroupSchema), createGroup);
-router.get("/groups/view/:viewId", viewSnapshotLimiter, getViewSnapshot);
-router.get("/groups/edit/:editId", requireEditAuth, getEditSnapshot);
-router.post("/groups/edit/:editId/participants", requireEditAuth, validateBody(addParticipantSchema), addParticipant);
-router.post("/groups/edit/:editId/expenses", requireEditAuth, validateBody(addExpenseSchema), addExpense);
-router.put("/groups/edit/:editId/expenses/:expenseId", requireEditAuth, validateBody(updateExpenseSchema), updateExpense);
-router.delete("/groups/edit/:editId/expenses/:expenseId", requireEditAuth, deleteExpense);
+router.post("/groups", mutationLimiter, validateBody(createGroupSchema), createGroup);
+router.get("/groups/view/:viewId", snapshotLimiter, getViewSnapshot);
+router.get("/groups/edit/:editId", requireEditAuth, snapshotLimiter, getEditSnapshot);
+router.post("/groups/edit/:editId/participants", requireEditAuth, mutationLimiter, validateBody(addParticipantSchema), addParticipant);
+router.post("/groups/edit/:editId/expenses", requireEditAuth, mutationLimiter, validateBody(addExpenseSchema), addExpense);
+router.put("/groups/edit/:editId/expenses/:expenseId", requireEditAuth, mutationLimiter, validateBody(updateExpenseSchema), updateExpense);
+router.delete("/groups/edit/:editId/expenses/:expenseId", requireEditAuth, mutationLimiter, deleteExpense);
 router.patch(
   "/groups/edit/:editId/participants/:participantId",
   requireEditAuth,
+  mutationLimiter,
   validateBody(patchParticipantSchema),
   patchParticipant
 );
 router.post(
   "/groups/edit/:editId/settlements",
   requireEditAuth,
+  mutationLimiter,
   validateBody(recordSettlementSchema),
   recordSettlement
 );
 router.delete(
   "/groups/edit/:editId/settlements/:settlementId",
   requireEditAuth,
+  mutationLimiter,
   deleteSettlement
 );
 router.patch(
   "/groups/edit/:editId/settlements",
   requireEditAuth,
+  mutationLimiter,
   validateBody(patchSettlementSchema),
   patchSettlement
 );
-router.get("/groups/view/:viewId/pdf", viewPdfLimiter, getViewPdf);
+router.get("/groups/view/:viewId/pdf", pdfLimiter, getViewPdf);
 
 export default router;

@@ -199,3 +199,45 @@ npm --prefix server run cleanup:inactive-groups
 
 Default retention window:
 - `45` days
+
+---
+
+## Production Deployment (Zero Cold Starts)
+
+Splix backend is optimized to run without 50+ second free-tier delays (avoiding Render's idle freeze). Choose either **Vercel Serverless** or **Railway / Koyeb**:
+
+### Option A: Vercel Serverless (Recommended)
+
+1. **Import the repository** into Vercel.
+2. In the project settings, set:
+   - **Root Directory**: `server`
+   - **Framework Preset**: Other
+3. Set the following **Environment Variables**:
+   - `MONGODB_URI`: Your MongoDB Atlas connection string.
+   - `JWT_SECRET`: A secure random secret string.
+   - `CORS_ORIGIN`: Your frontend URL(s), e.g. `https://splix-app.vercel.app` (supports comma-separated list and `*.vercel.app` preview branches).
+   - `CRON_SECRET`: (Optional) Secret key to protect the automated daily cleanup cron.
+4. **Deploy**:
+   - The backend runs via `server/api/index.js` with global connection caching and 15s max timeout.
+   - Vercel Cron automatically triggers `/api/cron/cleanup` daily at midnight to purge groups older than 45 days.
+
+### Option B: Railway or Koyeb (Persistent Container)
+
+1. Connect your Splix repository on [Railway](https://railway.app) or [Koyeb](https://www.koyeb.com).
+2. Configure the deployment:
+   - **Root Directory**: `server`
+   - Railway will automatically detect `server/Dockerfile` and `server/railway.json`.
+3. Set Environment Variables:
+   - `PORT`: `4000` (or Railway's dynamic port)
+   - `MONGODB_URI`: Your MongoDB connection string
+   - `JWT_SECRET`: A secure secret string
+   - `CORS_ORIGIN`: `https://splix-app.vercel.app`
+4. The service will run as an always-on Node 20 container with non-root security and clean SIGTERM/SIGINT teardowns.
+
+### Frontend Deployment (Vercel)
+
+1. In Vercel, create a second project for the frontend (or deploy from root):
+   - **Root Directory**: `client`
+   - **Framework Preset**: Vite
+   - **Environment Variable**: `VITE_API_BASE_URL` pointing to your deployed backend URL (e.g. `https://splix-api.vercel.app` or `https://splix.up.railway.app`).
+
