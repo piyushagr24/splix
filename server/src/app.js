@@ -32,6 +32,14 @@ app.options("*", cors(corsOptions));
 app.use(morgan("dev"));
 app.use(express.json({ limit: "1mb" }));
 
+app.get("/", (_, res) => {
+  res.json({
+    name: "Splix API",
+    status: "online",
+    health: "/health"
+  });
+});
+
 app.get("/health", (_, res) => {
   const dbStates = ["disconnected", "connected", "connecting", "disconnecting"];
   const dbState = dbStates[mongoose.connection.readyState] || "unknown";
