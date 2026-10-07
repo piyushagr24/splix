@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from "react";
 import { useParams } from "react-router-dom";
-import { Download, Link2, MoreVertical, Receipt, Share2, Wallet } from "lucide-react";
+import { Download, Link2, MoreVertical, Receipt, Share2, Wallet, WifiOff } from "lucide-react";
 import { toast } from "sonner";
 import { fetchViewSnapshot, pdfDownloadUrl } from "@/api";
 import { ExpenseList } from "@/components/ExpenseList";
@@ -8,6 +8,7 @@ import { LinkNotFoundCard } from "@/components/LinkNotFoundCard";
 import { SettlementList } from "@/components/SettlementList";
 import { ShareCard } from "@/components/ShareCard";
 import { usePollingSnapshot } from "@/usePollingSnapshot";
+import { usePwaInstall } from "@/pwa";
 import { money } from "@/utils/format";
 
 import { Button } from "@/components/ui/button";
@@ -23,8 +24,13 @@ import {
 
 export function ViewPage() {
   const { id: viewId = "" } = useParams();
+  const { canInstall, promptInstall } = usePwaInstall();
   const fetcher = useCallback(() => fetchViewSnapshot(viewId), [viewId]);
-  const { snapshot, loading, error, refetch } = usePollingSnapshot({ fetcher, enabled: Boolean(viewId) });
+  const { snapshot, loading, error, refetch } = usePollingSnapshot({
+    fetcher,
+    enabled: Boolean(viewId),
+    cacheKey: `view:${viewId}`
+  });
 
   const totalAmountMinor = useMemo(
     () => (snapshot?.expenses || []).reduce((sum, expense) => sum + expense.amountMinor, 0),
@@ -121,6 +127,12 @@ export function ViewPage() {
                     Download PDF Receipt
                   </a>
                 </DropdownMenuItem>
+                {canInstall && (
+                  <DropdownMenuItem onClick={promptInstall}>
+                    <Download className="h-4 w-4 mr-2 text-zinc-600" />
+                    Install Splix App
+                  </DropdownMenuItem>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>

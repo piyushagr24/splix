@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import {
   ChevronDown,
   ChevronRight,
+  CloudOff,
   Edit2,
   Filter,
   Receipt,
@@ -276,6 +277,15 @@ export function ExpenseList({
                       {expense.__pending && (
                         <Badge variant="secondary" className="text-[10px] py-0 px-1.5 animate-pulse">
                           syncing...
+                        </Badge>
+                      )}
+                      {expense.__isOffline && (
+                        <Badge
+                          variant="outline"
+                          className="text-[10px] py-0 px-1.5 font-normal text-zinc-500 border-zinc-200 inline-flex items-center gap-1"
+                        >
+                          <CloudOff className="h-2.5 w-2.5" />
+                          <span>offline</span>
                         </Badge>
                       )}
                     </div>

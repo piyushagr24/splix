@@ -5,6 +5,7 @@ import { Analytics } from "@vercel/analytics/react";
 import { Toaster } from "sonner";
 import App from "./App";
 import "./styles.css";
+import "./pwa";
 
 createRoot(document.getElementById("root")).render(
   <React.StrictMode>

@@ -11,6 +11,7 @@ import {
   MoreVertical,
   Plus,
   Receipt,
+  RefreshCw,
   Share2,
   Sparkles,
   User,
@@ -36,11 +37,15 @@ import { AddParticipantDialog } from "@/components/AddParticipantDialog";
 import { ExpenseList } from "@/components/ExpenseList";
 import { IdentitySelectorCard } from "@/components/IdentitySelectorCard";
 import { LinkNotFoundCard } from "@/components/LinkNotFoundCard";
+import { OfflineBanner } from "@/components/OfflineBanner";
 import { ParticipantProfileDialog } from "@/components/ParticipantProfileCard";
 import { PinGateCard } from "@/components/PinGateCard";
 import { SettlementList } from "@/components/SettlementList";
 import { ShareCard } from "@/components/ShareCard";
 import { usePollingSnapshot } from "@/usePollingSnapshot";
+import { useOfflineSync } from "@/useOfflineSync";
+import { usePwaInstall } from "@/pwa";
+import { saveCachedSnapshot } from "@/lib/db";
 import { deriveBalances, simplifyDebts } from "@/utils/settlement";
 import { identityKey, tokenKey } from "@/utils/storage";
 import { isValidUpiId, normalizeUpiId } from "@/utils/upiValidation";
@@ -95,10 +100,18 @@ export function EditPage() {
   }, []);
 
   const fetcher = useCallback(() => fetchEditSnapshot(editId, token), [editId, token]);
-  const { snapshot, loading, error, refetch } = usePollingSnapshot({
+  const { snapshot, setSnapshot, loading, error, refetch } = usePollingSnapshot({
     enabled: Boolean(token),
-    fetcher
+    fetcher,
+    cacheKey: `edit:${editId}`
   });
+
+  const { isOnline, pendingCount, isSyncing, syncNow, queueMutation } = useOfflineSync({
+    editId,
+    token,
+    onSynced: refetch
+  });
+  const { canInstall, promptInstall } = usePwaInstall();
 
   const participants = snapshot?.participants || [];
   const expensesFromServer = snapshot?.expenses || [];
@@ -155,6 +168,41 @@ export function EditPage() {
 
   async function onAdd(payload) {
     if (!token) return;
+    setAdding(true);
+
+    const isOfflineMode = !isOnline || (typeof navigator !== "undefined" && !navigator.onLine);
+
+    if (isOfflineMode) {
+      const tempId = `offline_exp_${Date.now()}`;
+      const offlineExpense = {
+        id: tempId,
+        title: payload.title,
+        amountMinor: payload.amountMinor,
+        paidByParticipantId: payload.paidByParticipantId,
+        category: payload.category || "general",
+        date: payload.date || new Date().toISOString(),
+        splitJson: payload.splitJson || {},
+        createdAt: new Date().toISOString(),
+        __isOffline: true
+      };
+
+      await queueMutation({ action: "addExpense", payload, tempId });
+      setSnapshot((curr) => {
+        if (!curr) return curr;
+        const updated = {
+          ...curr,
+          expenses: [offlineExpense, ...(curr.expenses || [])]
+        };
+        saveCachedSnapshot(`edit:${editId}`, updated);
+        return updated;
+      });
+
+      toast.success("Saved offline. Will sync when back online.");
+      setAddExpenseOpen(false);
+      setAdding(false);
+      return;
+    }
+
     const tempExpense = {
       id: `temp-${Date.now()}`,
       title: payload.title,
@@ -166,8 +214,8 @@ export function EditPage() {
       createdAt: new Date().toISOString(),
       __pending: true
     };
-    setAdding(true);
     setPendingExpenses((curr) => [tempExpense, ...curr]);
+
     try {
       const created = await addExpense(editId, token, payload);
       setPendingExpenses((curr) => curr.filter((item) => item.id !== tempExpense.id));
@@ -178,7 +226,35 @@ export function EditPage() {
       setPendingExpenses((curr) => curr.filter((item) => item.id !== created.id));
     } catch (err) {
       setPendingExpenses((curr) => curr.filter((item) => item.id !== tempExpense.id));
-      toast.error(err.message || "Failed to add expense");
+      const isNetworkErr = !navigator.onLine || err.message?.includes("fetch");
+      if (isNetworkErr) {
+        const tempId = `offline_exp_${Date.now()}`;
+        const offlineExpense = {
+          id: tempId,
+          title: payload.title,
+          amountMinor: payload.amountMinor,
+          paidByParticipantId: payload.paidByParticipantId,
+          category: payload.category || "general",
+          date: payload.date || new Date().toISOString(),
+          splitJson: payload.splitJson || {},
+          createdAt: new Date().toISOString(),
+          __isOffline: true
+        };
+        await queueMutation({ action: "addExpense", payload, tempId });
+        setSnapshot((curr) => {
+          if (!curr) return curr;
+          const updated = {
+            ...curr,
+            expenses: [offlineExpense, ...(curr.expenses || [])]
+          };
+          saveCachedSnapshot(`edit:${editId}`, updated);
+          return updated;
+        });
+        toast.success("Connection dropped. Saved offline to sync later.");
+        setAddExpenseOpen(false);
+      } else {
+        toast.error(err.message || "Failed to add expense");
+      }
     } finally {
       setAdding(false);
     }
@@ -187,6 +263,32 @@ export function EditPage() {
   async function onUpdateExpense(expenseId, payload) {
     if (!token) return;
     setAdding(true);
+
+    const isOfflineMode = !isOnline || (typeof navigator !== "undefined" && !navigator.onLine);
+
+    if (isOfflineMode) {
+      await queueMutation({
+        action: "updateExpense",
+        payload: { expenseId, ...payload }
+      });
+      setSnapshot((curr) => {
+        if (!curr) return curr;
+        const updated = {
+          ...curr,
+          expenses: (curr.expenses || []).map((exp) =>
+            exp.id === expenseId ? { ...exp, ...payload, __isOffline: true } : exp
+          )
+        };
+        saveCachedSnapshot(`edit:${editId}`, updated);
+        return updated;
+      });
+      toast.success("Expense updated offline.");
+      setEditingExpense(null);
+      setAddExpenseOpen(false);
+      setAdding(false);
+      return;
+    }
+
     try {
       await updateExpense(editId, expenseId, token, payload);
       toast.success("Expense updated");
@@ -194,7 +296,29 @@ export function EditPage() {
       setAddExpenseOpen(false);
       await refetch();
     } catch (err) {
-      toast.error(err.message || "Failed to update expense");
+      const isNetworkErr = !navigator.onLine || err.message?.includes("fetch");
+      if (isNetworkErr) {
+        await queueMutation({
+          action: "updateExpense",
+          payload: { expenseId, ...payload }
+        });
+        setSnapshot((curr) => {
+          if (!curr) return curr;
+          const updated = {
+            ...curr,
+            expenses: (curr.expenses || []).map((exp) =>
+              exp.id === expenseId ? { ...exp, ...payload, __isOffline: true } : exp
+            )
+          };
+          saveCachedSnapshot(`edit:${editId}`, updated);
+          return updated;
+        });
+        toast.success("Saved offline. Will sync when back online.");
+        setEditingExpense(null);
+        setAddExpenseOpen(false);
+      } else {
+        toast.error(err.message || "Failed to update expense");
+      }
     } finally {
       setAdding(false);
     }
@@ -202,6 +326,27 @@ export function EditPage() {
 
   async function onDelete(expenseId) {
     if (!token) return;
+
+    const isOfflineMode = !isOnline || (typeof navigator !== "undefined" && !navigator.onLine);
+
+    if (isOfflineMode) {
+      await queueMutation({
+        action: "deleteExpense",
+        payload: { expenseId }
+      });
+      setSnapshot((curr) => {
+        if (!curr) return curr;
+        const updated = {
+          ...curr,
+          expenses: (curr.expenses || []).filter((exp) => exp.id !== expenseId)
+        };
+        saveCachedSnapshot(`edit:${editId}`, updated);
+        return updated;
+      });
+      toast.success("Expense deleted offline.");
+      return;
+    }
+
     setOptimisticRemovedIds((curr) => [...curr, expenseId]);
     try {
       await deleteExpense(editId, expenseId, token);
@@ -209,21 +354,93 @@ export function EditPage() {
       await refetch();
       setOptimisticRemovedIds((curr) => curr.filter((item) => item !== expenseId));
     } catch (err) {
-      setOptimisticRemovedIds((curr) => curr.filter((item) => item !== expenseId));
-      toast.error(err.message || "Delete failed");
+      const isNetworkErr = !navigator.onLine || err.message?.includes("fetch");
+      if (isNetworkErr) {
+        await queueMutation({
+          action: "deleteExpense",
+          payload: { expenseId }
+        });
+        setSnapshot((curr) => {
+          if (!curr) return curr;
+          const updated = {
+            ...curr,
+            expenses: (curr.expenses || []).filter((exp) => exp.id !== expenseId)
+          };
+          saveCachedSnapshot(`edit:${editId}`, updated);
+          return updated;
+        });
+        toast.success("Deleted offline.");
+      } else {
+        setOptimisticRemovedIds((curr) => curr.filter((item) => item !== expenseId));
+        toast.error(err.message || "Delete failed");
+      }
     }
   }
 
   async function onAddMember(payload) {
     if (!token) return;
     setAddingMember(true);
+
+    const isOfflineMode = !isOnline || (typeof navigator !== "undefined" && !navigator.onLine);
+
+    if (isOfflineMode) {
+      const tempId = `offline_part_${Date.now()}`;
+      const localPerson = {
+        id: tempId,
+        name: payload.name.trim(),
+        upiId: payload.upiId || "",
+        createdAt: new Date().toISOString(),
+        __isOffline: true
+      };
+
+      await queueMutation({ action: "addParticipant", payload, tempId });
+      setSnapshot((curr) => {
+        if (!curr) return curr;
+        const updated = {
+          ...curr,
+          participants: [...(curr.participants || []), localPerson]
+        };
+        saveCachedSnapshot(`edit:${editId}`, updated);
+        return updated;
+      });
+
+      toast.success(`Added ${localPerson.name} offline`);
+      setAddMemberOpen(false);
+      setAddingMember(false);
+      return;
+    }
+
     try {
       const newPerson = await addParticipant(editId, token, payload);
       toast.success(`Added ${newPerson.name} to the group`);
       await refetch();
     } catch (err) {
-      toast.error(err.message || "Failed to add member");
-      throw err;
+      const isNetworkErr = !navigator.onLine || err.message?.includes("fetch");
+      if (isNetworkErr) {
+        const tempId = `offline_part_${Date.now()}`;
+        const localPerson = {
+          id: tempId,
+          name: payload.name.trim(),
+          upiId: payload.upiId || "",
+          createdAt: new Date().toISOString(),
+          __isOffline: true
+        };
+        await queueMutation({ action: "addParticipant", payload, tempId });
+        setSnapshot((curr) => {
+          if (!curr) return curr;
+          const updated = {
+            ...curr,
+            participants: [...(curr.participants || []), localPerson]
+          };
+          saveCachedSnapshot(`edit:${editId}`, updated);
+          return updated;
+        });
+        toast.success(`Added ${localPerson.name} offline`);
+        setAddMemberOpen(false);
+      } else {
+        toast.error(err.message || "Failed to add member");
+        throw err;
+      }
     } finally {
       setAddingMember(false);
     }
@@ -239,12 +456,61 @@ export function EditPage() {
     }
 
     setSavingProfile(true);
+    const isOfflineMode = !isOnline || (typeof navigator !== "undefined" && !navigator.onLine);
+
+    if (isOfflineMode) {
+      await queueMutation({
+        action: "updateParticipant",
+        payload: {
+          participantId: selectedParticipantId,
+          data: { upiId: normalizedUpiId }
+        }
+      });
+      setSnapshot((curr) => {
+        if (!curr) return curr;
+        const updated = {
+          ...curr,
+          participants: (curr.participants || []).map((p) =>
+            p.id === selectedParticipantId ? { ...p, upiId: normalizedUpiId } : p
+          )
+        };
+        saveCachedSnapshot(`edit:${editId}`, updated);
+        return updated;
+      });
+      toast.success(normalizedUpiId ? "UPI ID saved offline" : "UPI ID removed offline");
+      setSavingProfile(false);
+      return;
+    }
+
     try {
       await updateParticipant(editId, selectedParticipantId, token, { upiId: normalizedUpiId });
       toast.success(normalizedUpiId ? "UPI ID saved" : "UPI ID removed");
       await refetch();
     } catch (err) {
-      toast.error(err.message || "Failed to save profile");
+      const isNetworkErr = !navigator.onLine || err.message?.includes("fetch");
+      if (isNetworkErr) {
+        await queueMutation({
+          action: "updateParticipant",
+          payload: {
+            participantId: selectedParticipantId,
+            data: { upiId: normalizedUpiId }
+          }
+        });
+        setSnapshot((curr) => {
+          if (!curr) return curr;
+          const updated = {
+            ...curr,
+            participants: (curr.participants || []).map((p) =>
+              p.id === selectedParticipantId ? { ...p, upiId: normalizedUpiId } : p
+            )
+          };
+          saveCachedSnapshot(`edit:${editId}`, updated);
+          return updated;
+        });
+        toast.success("Profile saved offline");
+      } else {
+        toast.error(err.message || "Failed to save profile");
+      }
     } finally {
       setSavingProfile(false);
     }
@@ -252,24 +518,120 @@ export function EditPage() {
 
   async function onRecordSettlement(payload) {
     if (!token) return;
+
+    const isOfflineMode = !isOnline || (typeof navigator !== "undefined" && !navigator.onLine);
+
+    if (isOfflineMode) {
+      const tempId = `offline_setl_${Date.now()}`;
+      const localSettlement = {
+        id: tempId,
+        fromParticipantId: payload.fromParticipantId,
+        toParticipantId: payload.toParticipantId,
+        amountMinor: payload.amountMinor,
+        note: payload.note || "Settlement",
+        date: payload.date || new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+        __isOffline: true
+      };
+
+      await queueMutation({ action: "recordSettlement", payload, tempId });
+      setSnapshot((curr) => {
+        if (!curr) return curr;
+        const updated = {
+          ...curr,
+          settlementHistory: [localSettlement, ...(curr.settlementHistory || [])]
+        };
+        saveCachedSnapshot(`edit:${editId}`, updated);
+        return updated;
+      });
+
+      toast.success("Payment recorded offline & debt cleared");
+      return;
+    }
+
     try {
       await recordSettlement(editId, token, payload);
       toast.success("Payment recorded & debt cleared");
       await refetch();
     } catch (err) {
-      toast.error(err.message || "Failed to record payment");
-      throw err;
+      const isNetworkErr = !navigator.onLine || err.message?.includes("fetch");
+      if (isNetworkErr) {
+        const tempId = `offline_setl_${Date.now()}`;
+        const localSettlement = {
+          id: tempId,
+          fromParticipantId: payload.fromParticipantId,
+          toParticipantId: payload.toParticipantId,
+          amountMinor: payload.amountMinor,
+          note: payload.note || "Settlement",
+          date: payload.date || new Date().toISOString(),
+          createdAt: new Date().toISOString(),
+          __isOffline: true
+        };
+        await queueMutation({ action: "recordSettlement", payload, tempId });
+        setSnapshot((curr) => {
+          if (!curr) return curr;
+          const updated = {
+            ...curr,
+            settlementHistory: [localSettlement, ...(curr.settlementHistory || [])]
+          };
+          saveCachedSnapshot(`edit:${editId}`, updated);
+          return updated;
+        });
+        toast.success("Payment recorded offline");
+      } else {
+        toast.error(err.message || "Failed to record payment");
+        throw err;
+      }
     }
   }
 
   async function onDeleteSettlement(settlementId) {
     if (!token) return;
+
+    const isOfflineMode = !isOnline || (typeof navigator !== "undefined" && !navigator.onLine);
+
+    if (isOfflineMode) {
+      await queueMutation({
+        action: "deleteSettlement",
+        payload: { settlementId }
+      });
+      setSnapshot((curr) => {
+        if (!curr) return curr;
+        const updated = {
+          ...curr,
+          settlementHistory: (curr.settlementHistory || []).filter((s) => s.id !== settlementId)
+        };
+        saveCachedSnapshot(`edit:${editId}`, updated);
+        return updated;
+      });
+      toast.success("Payment reverted offline");
+      return;
+    }
+
     try {
       await deleteSettlement(editId, settlementId, token);
       toast.success("Payment reverted");
       await refetch();
     } catch (err) {
-      toast.error(err.message || "Failed to revert payment");
+      const isNetworkErr = !navigator.onLine || err.message?.includes("fetch");
+      if (isNetworkErr) {
+        await queueMutation({
+          action: "deleteSettlement",
+          payload: { settlementId }
+        });
+        setSnapshot((curr) => {
+          if (!curr) return curr;
+          const updated = {
+            ...curr,
+            settlementHistory: (curr.settlementHistory || []).filter((s) => s.id !== settlementId)
+          };
+          saveCachedSnapshot(`edit:${editId}`, updated);
+          return updated;
+        });
+        toast.success("Payment reverted offline");
+      } else {
+        toast.error(err.message || "Failed to revert payment");
+      }
     }
   }
 
@@ -384,6 +746,20 @@ export function EditPage() {
 
             {/* Quick Actions & User Pill */}
             <div className="flex items-center gap-2">
+              {pendingCount > 0 && (
+                <Badge
+                  variant="outline"
+                  onClick={isOnline ? syncNow : undefined}
+                  className={`h-9 gap-1.5 px-2.5 text-xs font-normal border-amber-300 bg-amber-50 text-amber-800 rounded-xl ${
+                    isOnline ? "cursor-pointer hover:bg-amber-100" : ""
+                  }`}
+                  title={isOnline ? "Click to sync now" : "Saved offline"}
+                >
+                  <RefreshCw className={`h-3 w-3 ${isSyncing ? "animate-spin" : ""}`} />
+                  <span>{pendingCount}</span>
+                </Badge>
+              )}
+
               <Button
                 variant="outline"
                 size="sm"
@@ -446,6 +822,12 @@ export function EditPage() {
                       Download PDF
                     </a>
                   </DropdownMenuItem>
+                  {canInstall && (
+                    <DropdownMenuItem onClick={promptInstall}>
+                      <Download className="h-4 w-4 mr-2 text-zinc-600" />
+                      Install Splix App
+                    </DropdownMenuItem>
+                  )}
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => setProfileOpen(true)}>
                     <User className="h-4 w-4 mr-2" />
@@ -464,6 +846,14 @@ export function EditPage() {
               </DropdownMenu>
             </div>
           </div>
+
+          {/* Offline & Sync Status Banner */}
+          <OfflineBanner
+            isOnline={isOnline}
+            pendingCount={pendingCount}
+            isSyncing={isSyncing}
+            onSync={syncNow}
+          />
 
           {/* Tabbed Navigation Layout */}
           <Tabs defaultValue="expenses" className="w-full">
