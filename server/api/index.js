@@ -1,6 +1,6 @@
 import app from "../src/app.js";
 import { connectDb } from "../src/db.js";
-import { assertEnv, env } from "../src/env.js";
+import { assertEnv, env, isOriginAllowed } from "../src/env.js";
 
 let bootPromise = null;
 
@@ -19,6 +19,20 @@ async function ensureBoot() {
 }
 
 export default async function handler(req, res) {
+  const origin = req.headers.origin;
+  if (origin && isOriginAllowed(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Access-Control-Allow-Credentials", "true");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, PATCH, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  } else if (!origin) {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+  }
+
+  if (req.method === "OPTIONS") {
+    return res.status(204).end();
+  }
+
   try {
     await ensureBoot();
     return app(req, res);
@@ -26,8 +40,9 @@ export default async function handler(req, res) {
     console.error("Serverless boot error:", error);
     return res.status(500).json({
       error: "Database or server initialization error",
-      details: process.env.NODE_ENV === "production" ? undefined : error.message
+      details: error.message || String(error)
     });
   }
 }
+
 
