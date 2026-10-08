@@ -22,4 +22,3 @@ export function SplixLogo({ className = "h-8 w-auto" }) {
     </div>
   );
 }
-

@@ -1,17 +1,40 @@
 import { useEffect, useMemo, useState } from "react";
-import { CheckCircle2, Copy, ExternalLink, X } from "lucide-react";
+import { Link } from "react-router-dom";
+import {
+  ArrowRight,
+  Check,
+  CheckCircle2,
+  Copy,
+  ExternalLink,
+  Link2,
+  Lock,
+  Plus,
+  RefreshCw,
+  Trash2,
+  Users
+} from "lucide-react";
 import { toast } from "sonner";
 import { createGroup, warmApi } from "../api";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
-const standardCurrencies = ["AED", "AUD", "BRL", "CAD", "CHF", "CNY", "EUR", "GBP", "HKD", "INR", "JPY", "KRW", "MXN", "NOK", "NZD", "SAR", "SEK", "SGD", "TRY", "USD", "ZAR"];
+const standardCurrencies = [
+  "AED", "AUD", "BRL", "CAD", "CHF", "CNY", "EUR", "GBP",
+  "HKD", "INR", "JPY", "KRW", "MXN", "NOK", "NZD", "SAR",
+  "SEK", "SGD", "TRY", "USD", "ZAR"
+];
 
-export function CreateGroupCard() {
+export function CreateGroupCard({ isDialog = false, onClose }) {
   const [name, setName] = useState("");
   const [currency, setCurrency] = useState("INR");
   const [pin, setPin] = useState("");
   const [participants, setParticipants] = useState(["Person 1", "Person 2"]);
   const [result, setResult] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [copiedKey, setCopiedKey] = useState(null);
 
   useEffect(() => {
     const runWarmup = () => {
@@ -50,7 +73,7 @@ export function CreateGroupCard() {
         participants: cleanParticipants
       });
       setResult(data);
-      toast.success("Group created");
+      toast.success("Group created successfully!");
     } catch (error) {
       toast.error(error.message || "Failed to create group");
     } finally {
@@ -58,132 +81,350 @@ export function CreateGroupCard() {
     }
   }
 
-  async function copyLink(path) {
+  async function copyLink(path, key) {
     const url = `${window.location.origin}${path}`;
     await navigator.clipboard.writeText(url);
-    toast.success("Link copied");
+    if (key) {
+      setCopiedKey(key);
+      setTimeout(() => {
+        setCopiedKey((curr) => (curr === key ? null : curr));
+      }, 2000);
+    }
+    toast.success("Link copied to clipboard");
   }
 
-  function LinkPanel({ label, path }) {
-    return (
-      <div className="rounded-[1.2rem] border border-emerald-200 bg-white px-3.5 py-3.5 shadow-sm sm:rounded-[1.65rem] sm:px-5 sm:py-5">
-        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">{label}</p>
-        <a
-          className="mt-2 block break-all text-[13px] text-emerald-700 underline decoration-emerald-300 underline-offset-4 transition hover:text-emerald-800 sm:mt-3 sm:text-[1.05rem]"
-          href={path}
-          target="_blank"
-          rel="noreferrer"
-        >
-          {path}
-        </a>
-        <div className="mt-2.5 flex flex-wrap gap-1.5 sm:mt-4 sm:gap-2">
-          <button className="btn-ghost rounded-xl px-2.5 py-1 text-[11px] sm:px-4 sm:py-2 sm:text-sm" onClick={() => copyLink(path)} type="button">
-            <Copy size={13} />
-            Copy
-          </button>
-          <a className="btn-ghost rounded-xl px-2.5 py-1 text-[11px] sm:px-4 sm:py-2 sm:text-sm" href={path} target="_blank" rel="noreferrer">
-            <ExternalLink size={13} />
-            Open
-          </a>
+  const innerContent = (
+    <div className={isDialog ? "space-y-4 max-h-[80vh] overflow-y-auto pr-1" : "space-y-4"}>
+      {/* Header if inside dialog */}
+      {isDialog && (
+        <div className={`flex items-center gap-3 pb-3 border-b pr-6 ${result ? "border-emerald-200/70" : "border-zinc-100"}`}>
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-100 text-emerald-800 shrink-0">
+            {result ? <CheckCircle2 className="h-5 w-5 text-emerald-700" /> : <Users className="h-5 w-5" />}
+          </div>
+          <div className="min-w-0 flex-1">
+            <h2 className="text-lg font-bold text-zinc-900 leading-tight">
+              {result ? "Links generated" : "Create a Group"}
+            </h2>
+            <p className={`text-xs mt-0.5 ${result ? "text-emerald-800 font-medium" : "text-zinc-500"}`}>
+              {result ? "Use Edit to manage expenses. Share View for read-only access." : "Start splitting bills instantly. No account required."}
+            </p>
+          </div>
         </div>
-      </div>
-    );
+      )}
+
+      {!result ? (
+        <form className="space-y-4" onSubmit={onSubmit}>
+          {/* Group Name */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-zinc-700">Group Name</label>
+            <div className="relative">
+              <Input
+                autoFocus={isDialog}
+                className="pl-9 h-11 text-sm rounded-xl"
+                maxLength={50}
+                placeholder="e.g. Goa Trip, Flat 402, Friday Dinner"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                onFocus={() => void warmApi()}
+              />
+              <Users className="absolute left-3 top-3.5 h-4 w-4 text-zinc-400" />
+            </div>
+          </div>
+
+          {/* Currency & PIN */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-zinc-700 block">Currency</label>
+              <div className="relative">
+                <select
+                  className="flex h-11 w-full rounded-xl border border-zinc-300 bg-white px-3.5 py-2 text-sm font-medium text-zinc-900 focus-visible:outline-none focus-visible:border-emerald-600 focus-visible:ring-2 focus-visible:ring-emerald-200 transition-all cursor-pointer"
+                  value={currency}
+                  onChange={(e) => setCurrency(e.target.value)}
+                  onFocus={() => void warmApi()}
+                >
+                  {standardCurrencies.map((code) => (
+                    <option key={code} value={code}>
+                      {code}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-zinc-700 block">PIN</label>
+              <div className="relative">
+                <Input
+                  className="pl-9 font-mono tracking-widest text-sm rounded-xl h-11"
+                  placeholder="••••"
+                  maxLength={4}
+                  inputMode="numeric"
+                  value={pin}
+                  onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
+                  onFocus={() => void warmApi()}
+                />
+                <Lock className="absolute left-3 top-3.5 h-4 w-4 text-zinc-400" />
+              </div>
+            </div>
+          </div>
+
+          {/* Participants */}
+          <div className="space-y-2.5 pt-1">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold text-zinc-700">Group Members</label>
+              <Badge variant="outline" className="text-[11px] font-semibold text-zinc-600">
+                {participants.filter((p) => p.trim()).length} members
+              </Badge>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              {participants.map((participant, index) => (
+                <div key={index} className="flex items-center gap-2">
+                  <div className="relative flex-1 flex items-center">
+                    <Avatar className="absolute left-2.5 h-6 w-6 text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                      <AvatarFallback className="bg-emerald-100 text-emerald-800 font-bold">
+                        {participant.trim()
+                          ? participant.trim().slice(0, 2).toUpperCase()
+                          : String(index + 1)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <Input
+                      className="pl-10 h-10 text-xs sm:text-sm rounded-xl"
+                      maxLength={32}
+                      placeholder={`Person ${index + 1}`}
+                      value={participant}
+                      onChange={(e) =>
+                        setParticipants((curr) =>
+                          curr.map((item, i) => (i === index ? e.target.value : item))
+                        )
+                      }
+                      onFocus={() => void warmApi()}
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-10 w-10 text-zinc-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl shrink-0"
+                    disabled={participants.length <= 2}
+                    onClick={() =>
+                      setParticipants((curr) =>
+                        curr.length <= 2 ? curr : curr.filter((_, i) => i !== index)
+                      )
+                    }
+                    title={participants.length <= 2 ? "Minimum 2 participants required" : "Remove person"}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+
+            <div className="pt-0.5">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setParticipants((curr) => [...curr, `Person ${curr.length + 1}`])}
+                className="rounded-xl border-dashed border-zinc-300 text-zinc-600 hover:border-emerald-400 hover:text-emerald-700 h-9 gap-1.5 text-xs font-semibold"
+              >
+                <Plus className="h-3.5 w-3.5 text-emerald-600" />
+                Add Member
+              </Button>
+            </div>
+          </div>
+
+          {/* Submit Button */}
+          <div className="pt-2">
+            <Button
+              type="submit"
+              size="lg"
+              disabled={saving || !canSubmit}
+              className="w-full h-11 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm shadow-sm gap-2"
+            >
+              {saving ? (
+                <>
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                  Creating Group...
+                </>
+              ) : (
+                "Create Group"
+              )}
+            </Button>
+          </div>
+        </form>
+      ) : (
+        /* Result state matching original LinkPanel layout with current theme */
+        <div className="space-y-3.5 pt-1">
+          {/* Edit Link Panel */}
+          <div className="rounded-2xl border border-emerald-200/90 bg-white p-4 sm:p-5 shadow-2xs space-y-2.5">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">
+              Edit link
+            </p>
+            <a
+              className="mt-1 block break-all font-mono text-sm sm:text-base font-semibold text-emerald-700 underline decoration-emerald-300 underline-offset-4 transition hover:text-emerald-800"
+              href={result.editLink}
+              target="_blank"
+              rel="noreferrer"
+            >
+              {result.editLink}
+            </a>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => copyLink(result.editLink, "edit")}
+                className={`h-9 px-3.5 rounded-xl text-xs font-semibold gap-1.5 bg-white border-zinc-200 transition-all ${
+                  copiedKey === "edit"
+                    ? "bg-emerald-50 text-emerald-700 border-emerald-300"
+                    : "hover:bg-zinc-50 text-zinc-700"
+                }`}
+              >
+                {copiedKey === "edit" ? (
+                  <>
+                    <Check className="h-3.5 w-3.5 text-emerald-600" />
+                    <span>Copied</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="h-3.5 w-3.5 text-zinc-500" />
+                    <span>Copy</span>
+                  </>
+                )}
+              </Button>
+
+              <Button
+                variant="outline"
+                size="sm"
+                asChild
+                className="h-9 px-3.5 rounded-xl text-xs font-semibold gap-1.5 bg-white border-zinc-200 hover:bg-zinc-50 text-zinc-700 shadow-2xs"
+              >
+                <Link to={result.editLink} target="_blank" rel="noreferrer">
+                  <ExternalLink className="h-3.5 w-3.5 text-zinc-500" />
+                  <span>Open</span>
+                </Link>
+              </Button>
+            </div>
+          </div>
+
+          {/* View Link Panel */}
+          <div className="rounded-2xl border border-emerald-200/90 bg-white p-4 sm:p-5 shadow-2xs space-y-2.5">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">
+              View link
+            </p>
+            <a
+              className="mt-1 block break-all font-mono text-sm sm:text-base font-semibold text-emerald-700 underline decoration-emerald-300 underline-offset-4 transition hover:text-emerald-800"
+              href={result.viewLink}
+              target="_blank"
+              rel="noreferrer"
+            >
+              {result.viewLink}
+            </a>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => copyLink(result.viewLink, "view")}
+                className={`h-9 px-3.5 rounded-xl text-xs font-semibold gap-1.5 bg-white border-zinc-200 transition-all ${
+                  copiedKey === "view"
+                    ? "bg-emerald-50 text-emerald-700 border-emerald-300"
+                    : "hover:bg-zinc-50 text-zinc-700"
+                }`}
+              >
+                {copiedKey === "view" ? (
+                  <>
+                    <Check className="h-3.5 w-3.5 text-emerald-600" />
+                    <span>Copied</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="h-3.5 w-3.5 text-zinc-500" />
+                    <span>Copy</span>
+                  </>
+                )}
+              </Button>
+
+              <Button
+                variant="outline"
+                size="sm"
+                asChild
+                className="h-9 px-3.5 rounded-xl text-xs font-semibold gap-1.5 bg-white border-zinc-200 hover:bg-zinc-50 text-zinc-700 shadow-2xs"
+              >
+                <Link to={result.viewLink} target="_blank" rel="noreferrer">
+                  <ExternalLink className="h-3.5 w-3.5 text-zinc-500" />
+                  <span>Open</span>
+                </Link>
+              </Button>
+            </div>
+          </div>
+
+          {/* Reset / Create Another */}
+          <div className="flex items-center justify-center pt-2">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setResult(null);
+                setName("");
+                setPin("");
+                setParticipants(["Person 1", "Person 2"]);
+              }}
+              className="text-xs text-emerald-800 hover:text-emerald-950 hover:bg-emerald-100/60 h-8 px-3 rounded-lg gap-1.5 font-semibold transition"
+            >
+              <Plus className="h-3.5 w-3.5 text-emerald-600" />
+              <span>Create another group</span>
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  if (isDialog) {
+    return innerContent;
   }
 
   return (
-    <div className="relative max-w-3xl overflow-hidden rounded-3xl border border-zinc-200 bg-white p-4 shadow-[0_20px_60px_rgba(0,0,0,0.08)] reveal reveal-2 sm:p-5 md:p-6">
-      <div className="pointer-events-none absolute -right-24 -top-20 h-48 w-48 rounded-full bg-emerald-500/10 blur-2xl" />
-      <div className="pointer-events-none absolute -bottom-20 -left-16 h-44 w-44 rounded-full bg-lime-500/10 blur-2xl" />
-      <div className="relative flex items-center gap-2">
-        <h2 className="text-lg font-semibold text-zinc-900 sm:text-xl">Create Group</h2>
-      </div>
-      <form className="mt-3.5 grid gap-2.5 sm:mt-4 sm:gap-3" onSubmit={onSubmit}>
-        <input className="input text-sm sm:text-base" maxLength={50} placeholder="Group name (e.g. Goa Trip)" value={name} onChange={(e) => setName(e.target.value)} onFocus={() => void warmApi()} />
-        <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
-          <select
-            className="input text-sm sm:text-base"
-            value={currency}
-            onChange={(e) => setCurrency(e.target.value)}
-            onFocus={() => void warmApi()}
-          >
-            {standardCurrencies.map((code) => (
-              <option key={code} value={code}>
-                {code}
-              </option>
-            ))}
-          </select>
-          <input
-            className="input text-sm sm:text-base"
-            placeholder="4-digit PIN"
-            maxLength={4}
-            inputMode="numeric"
-            value={pin}
-            onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
-            onFocus={() => void warmApi()}
-          />
-        </div>
-
-        <div className="grid gap-2">
-          {participants.map((participant, index) => (
-            <div key={index} className="flex items-center gap-2">
-              <input
-                className="input text-sm sm:text-base"
-                maxLength={32}
-                placeholder={`Participant ${index + 1}`}
-                value={participant}
-                onChange={(e) =>
-                  setParticipants((curr) => curr.map((item, i) => (i === index ? e.target.value : item)))
-                }
-                onFocus={() => void warmApi()}
-              />
-              <button
-                className="btn-ghost p-2 text-xs sm:text-sm"
-                type="button"
-                disabled={participants.length <= 2}
-                onClick={() =>
-                  setParticipants((curr) => {
-                    if (curr.length <= 2) return curr;
-                    return curr.filter((_, i) => i !== index);
-                  })
-                }
-              >
-                <X size={16} />
-              </button>
-            </div>
-          ))}
-          <button
-            className="btn-ghost w-fit rounded-lg px-3 py-1.5 text-xs sm:px-4 sm:py-2 sm:text-sm"
-            type="button"
-            onClick={() => setParticipants((curr) => [...curr, `Person ${curr.length + 1}`])}
-          >
-            Add participant
-          </button>
-        </div>
-
-        <button className="btn-primary px-4 py-2 text-sm" type="submit" disabled={saving || !canSubmit}>
-          {saving ? "Creating group...Please wait" : "Create group"}
-        </button>
-      </form>
-
-      {result ? (
-        <section className="mt-4 rounded-[1.45rem] border border-emerald-300 bg-emerald-50/80 p-3.5 shadow-[0_18px_45px_rgba(16,185,129,0.12)] sm:mt-6 sm:rounded-[1.9rem] sm:p-5">
-          <div className="flex items-center gap-2">
-            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 sm:h-7 sm:w-7">
-              <CheckCircle2 size={18} />
+    <Card
+      className={`transition-all duration-200 rounded-2xl sm:rounded-3xl ${
+        result
+          ? "border-emerald-300 bg-emerald-50 shadow-sm"
+          : "border-zinc-200/90 bg-white/95 shadow-sm"
+      }`}
+    >
+      <CardHeader
+        className={`p-5 sm:p-6 pb-4 sm:pb-4 border-b transition-colors duration-200 ${
+          result ? "border-emerald-200/60" : "border-zinc-100"
+        }`}
+      >
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-100 text-emerald-800">
+              {result ? <CheckCircle2 className="h-5 w-5 text-emerald-700" /> : <Users className="h-5 w-5" />}
             </div>
             <div>
-              <h3 className="text-base font-semibold text-zinc-900 sm:text-lg">Links generated</h3>
+              <CardTitle className="text-lg sm:text-xl font-bold text-zinc-900">
+                {result ? "Links generated" : "Create a Group"}
+              </CardTitle>
+              <CardDescription
+                className={`text-xs sm:text-sm mt-0.5 font-medium transition-colors ${
+                  result ? "text-emerald-800/80" : "text-zinc-500"
+                }`}
+              >
+                {result
+                  ? "Use Edit to manage expenses. Share View for read-only access."
+                  : "Start splitting bills instantly. No account required."}
+              </CardDescription>
             </div>
           </div>
-          <p className="mt-2 text-[11px] text-emerald-800 sm:text-sm">
-            Use Edit to manage expenses. Share View for read-only access.
-          </p>
-          <div className="mt-2 grid gap-1.5 sm:gap-2">
-            <LinkPanel label="Edit link" path={result.editLink} />
-            <LinkPanel label="View link" path={result.viewLink} />
-          </div>
-        </section>
-      ) : null}
-    </div>
+        </div>
+      </CardHeader>
+      <CardContent className="p-5 sm:p-6 pt-5">
+        {innerContent}
+      </CardContent>
+    </Card>
   );
 }

@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
-import { Download, WifiOff } from "lucide-react";
+import { Link, useLocation } from "react-router-dom";
+import { Download, Plus, WifiOff } from "lucide-react";
 import { SplixLogo } from "./Logo";
 import { usePwaInstall } from "@/pwa";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
 export function AppHeader({ groupName, rightContent }) {
+  const location = useLocation();
+  const isLanding = location.pathname === "/" && !groupName;
   const { canInstall, promptInstall } = usePwaInstall();
   const [isOnline, setIsOnline] = useState(() =>
     typeof navigator !== "undefined" ? navigator.onLine : true
@@ -39,6 +41,16 @@ export function AppHeader({ groupName, rightContent }) {
               <span className="text-sm font-semibold text-zinc-900 truncate max-w-xs">{groupName}</span>
             </div>
           )}
+          {isLanding && (
+            <nav className="hidden md:flex items-center gap-5 pl-4 border-l border-zinc-200/80">
+              <a href="#why-splix" className="text-xs font-semibold text-zinc-600 hover:text-emerald-700 transition">
+                Features
+              </a>
+              <a href="#how-it-works" className="text-xs font-semibold text-zinc-600 hover:text-emerald-700 transition">
+                How It Works
+              </a>
+            </nav>
+          )}
           {!isOnline && (
             <Badge
               variant="secondary"
@@ -70,6 +82,19 @@ export function AppHeader({ groupName, rightContent }) {
             >
               <Download className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">Install App</span>
+            </Button>
+          )}
+
+          {isLanding && !rightContent && (
+            <Button
+              size="sm"
+              asChild
+              className="h-8 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs gap-1.5 shadow-sm hidden sm:inline-flex"
+            >
+              <a href="#create-group">
+                <Plus className="h-3.5 w-3.5" />
+                <span>Create Group</span>
+              </a>
             </Button>
           )}
 
