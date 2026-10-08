@@ -26,6 +26,7 @@ import {
   createSession,
   deleteExpense,
   deleteSettlement,
+  fetchEditGroupMeta,
   fetchEditSnapshot,
   recordSettlement,
   updateExpense,
@@ -45,7 +46,7 @@ import { ShareCard } from "@/components/ShareCard";
 import { usePollingSnapshot } from "@/usePollingSnapshot";
 import { useOfflineSync } from "@/useOfflineSync";
 import { usePwaInstall } from "@/pwa";
-import { saveCachedSnapshot } from "@/lib/db";
+import { saveCachedSnapshot, getCachedSnapshot } from "@/lib/db";
 import { deriveBalances, simplifyDebts } from "@/utils/settlement";
 import { identityKey, tokenKey } from "@/utils/storage";
 import { isValidUpiId, normalizeUpiId } from "@/utils/upiValidation";
@@ -85,6 +86,8 @@ export function EditPage() {
   const [addExpenseOpen, setAddExpenseOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState(null);
   const [missingLink, setMissingLink] = useState(false);
+  const [groupMeta, setGroupMeta] = useState(null);
+  const [metaLoading, setMetaLoading] = useState(false);
   const [pendingExpenses, setPendingExpenses] = useState([]);
   const [optimisticRemovedIds, setOptimisticRemovedIds] = useState([]);
   const [isDesktop, setIsDesktop] = useState(
@@ -98,6 +101,47 @@ export function EditPage() {
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
+
+  useEffect(() => {
+    if (token || !editId) return;
+    let active = true;
+
+    // Check cached snapshot for instant metadata if available
+    getCachedSnapshot(`edit:${editId}`).then((cached) => {
+      if (active && cached?.group) {
+        setGroupMeta({
+          name: cached.group.name,
+          currency: cached.group.currency,
+          participantCount: cached.participants?.length || 0,
+          viewId: cached.group.viewId,
+          createdAt: cached.group.createdAt
+        });
+      }
+    });
+
+    setMetaLoading(true);
+    fetchEditGroupMeta(editId)
+      .then((meta) => {
+        if (active) {
+          setGroupMeta(meta);
+          setMissingLink(false);
+        }
+      })
+      .catch((err) => {
+        if (active) {
+          if (err.message === "Group not found") {
+            setMissingLink(true);
+          }
+        }
+      })
+      .finally(() => {
+        if (active) setMetaLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [editId, token]);
 
   const fetcher = useCallback(() => fetchEditSnapshot(editId, token), [editId, token]);
   const { snapshot, setSnapshot, loading, error, refetch } = usePollingSnapshot({
@@ -149,12 +193,14 @@ export function EditPage() {
       setToken(data.token);
       setMissingLink(false);
       toast.success("Unlocked edit access");
+      return { ok: true };
     } catch (err) {
       if (err.message === "Group not found") {
         setMissingLink(true);
-        return;
+        return { ok: false, error: "Group not found" };
       }
       toast.error(err.message || "Invalid PIN");
+      return { ok: false, error: err.message || "Invalid PIN" };
     } finally {
       setUnlocking(false);
     }
@@ -407,13 +453,14 @@ export function EditPage() {
       toast.success(`Added ${localPerson.name} offline`);
       setAddMemberOpen(false);
       setAddingMember(false);
-      return;
+      return localPerson;
     }
 
     try {
       const newPerson = await addParticipant(editId, token, payload);
       toast.success(`Added ${newPerson.name} to the group`);
       await refetch();
+      return newPerson;
     } catch (err) {
       const isNetworkErr = !navigator.onLine || err.message?.includes("fetch");
       if (isNetworkErr) {
@@ -437,6 +484,7 @@ export function EditPage() {
         });
         toast.success(`Added ${localPerson.name} offline`);
         setAddMemberOpen(false);
+        return localPerson;
       } else {
         toast.error(err.message || "Failed to add member");
         throw err;
@@ -651,7 +699,12 @@ export function EditPage() {
   if (!token) {
     return (
       <main className="shell max-w-lg py-12">
-        <PinGateCard onSubmit={unlock} loading={unlocking} />
+        <PinGateCard
+          groupMeta={groupMeta}
+          metaLoading={metaLoading && !groupMeta}
+          onSubmit={unlock}
+          loading={unlocking}
+        />
       </main>
     );
   }
@@ -693,18 +746,24 @@ export function EditPage() {
 
   if (snapshot && (!selectedParticipantId || !participants.find((item) => item.id === selectedParticipantId))) {
     return (
-      <main className="shell max-w-lg py-8">
-        <header className="text-center mb-6">
-          <h1 className="text-2xl font-bold text-zinc-900">{snapshot.group.name}</h1>
-          <Badge variant="outline" className="mt-1 text-xs">
-            Edit Access Unlocked
-          </Badge>
-        </header>
+      <main className="shell max-w-lg py-10">
         <IdentitySelectorCard
+          groupName={snapshot.group.name}
           participants={orderedParticipants}
           selectedId={selectedParticipantId}
           onSelect={selectIdentity}
-          description="Select who you are to personalize your dashboard and expenses."
+          onAddParticipant={() => setAddMemberOpen(true)}
+        />
+        <AddParticipantDialog
+          open={addMemberOpen}
+          onOpenChange={setAddMemberOpen}
+          onAdd={async (payload) => {
+            const created = await onAddMember(payload);
+            if (created && created.id) {
+              selectIdentity(created.id);
+            }
+          }}
+          adding={addingMember}
         />
       </main>
     );

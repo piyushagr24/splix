@@ -166,6 +166,20 @@ async function getEditSnapshot(req, res) {
   return res.json(snapshot);
 }
 
+async function getEditGroupMeta(req, res) {
+  const group = await getGroupByEditId(req.params.editId);
+  if (!group) return res.status(404).json({ error: "Group not found" });
+  const participantCount = await Participant.countDocuments({ groupId: group._id });
+  setNoCache(res);
+  return res.json({
+    name: group.name,
+    currency: group.currency,
+    participantCount,
+    viewId: group.viewId,
+    createdAt: group.createdAt
+  });
+}
+
 async function addExpense(req, res) {
   const { editId } = req.params;
   const group = await getGroupByEditId(editId);
@@ -426,6 +440,7 @@ async function getViewPdf(req, res) {
 const router = express.Router();
 router.post("/groups", mutationLimiter, validateBody(createGroupSchema), createGroup);
 router.get("/groups/view/:viewId", snapshotLimiter, getViewSnapshot);
+router.get("/groups/edit/:editId/meta", snapshotLimiter, getEditGroupMeta);
 router.get("/groups/edit/:editId", requireEditAuth, snapshotLimiter, getEditSnapshot);
 router.post("/groups/edit/:editId/participants", requireEditAuth, mutationLimiter, validateBody(addParticipantSchema), addParticipant);
 router.post("/groups/edit/:editId/expenses", requireEditAuth, mutationLimiter, validateBody(addExpenseSchema), addExpense);

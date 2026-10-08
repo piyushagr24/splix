@@ -62,6 +62,10 @@ function fetchEditSnapshot(editId, token) {
   });
 }
 
+function fetchEditGroupMeta(editId) {
+  return apiRequest(`/api/groups/edit/${editId}/meta`);
+}
+
 function addExpense(editId, token, payload) {
   return apiRequest(`/api/groups/edit/${editId}/expenses`, {
     method: "POST",
@@ -137,6 +141,7 @@ export {
   createSession,
   deleteExpense,
   deleteSettlement,
+  fetchEditGroupMeta,
   fetchEditSnapshot,
   fetchViewSnapshot,
   pdfDownloadUrl,
